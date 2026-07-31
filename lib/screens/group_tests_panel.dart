@@ -1,10 +1,10 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/teacher_api.dart';
 import '../config.dart';
 import '../models/models.dart';
+import '../services/file_pick.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/sub_scaffold.dart';
@@ -730,28 +730,14 @@ class _TestFormSheetState extends State<TestFormSheet> {
       _error = null;
     });
     try {
-      // file_picker 11: `FilePicker.platform` o'rniga statik `pickFiles`.
-      final res = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx'],
-        withData: true,
-      );
-      final file = res?.files.firstOrNull;
+      // Native hujjat tanlash (PDF/rasm/DOCX) — `FilePick` MethodChannel orqali.
+      final file = await FilePick.pick();
       if (file == null) {
+        // Bekor qilindi.
         if (mounted) setState(() => _uploading = false);
         return;
       }
-      final bytes = file.bytes;
-      if (bytes == null) {
-        if (mounted) {
-          setState(() {
-            _uploading = false;
-            _error = "Faylni o'qib bo'lmadi";
-          });
-        }
-        return;
-      }
-      final up = await TeacherApi.uploadTestFile(bytes, file.name);
+      final up = await TeacherApi.uploadTestFile(file.bytes, file.name);
       if (!mounted) return;
       setState(() {
         _pdfUrl = up.url;
