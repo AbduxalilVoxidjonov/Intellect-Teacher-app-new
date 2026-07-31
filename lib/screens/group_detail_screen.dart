@@ -8,7 +8,6 @@ import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
-import 'group_curriculum_section.dart';
 import 'group_grading_section.dart';
 import 'group_rating_tab.dart';
 import 'group_tests_panel.dart';
@@ -330,8 +329,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 title: 'Imtihonlar (testlar)',
               ),
           },
-          const SizedBox(height: 12),
-          GroupCurriculumSection(groupId: widget.groupId),
+          // DIQQAT: web'da bu yerda «O'quv dasturi» bo'limi ham bor, lekin ilovada u
+          // ATAYLAB ko'rsatilmaydi (jurnal sahifasi yengil qolsin) — o'quv dasturi
+          // Profil → «O'quv dasturi» bo'limida ochiladi.
         ],
       ),
     );

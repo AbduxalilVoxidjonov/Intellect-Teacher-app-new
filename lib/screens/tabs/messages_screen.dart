@@ -18,13 +18,26 @@ const String _kStaffChannelLabel = 'Xodimlar';
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
   @override
-  State<MessagesScreen> createState() => _MessagesScreenState();
+  State<MessagesScreen> createState() => MessagesScreenState();
 }
 
-class _MessagesScreenState extends State<MessagesScreen> {
+/// DIQQAT: holat sinfi ATAYLAB ochiq (public) — qobiq (`ShellScreen`) qurilmaning
+/// "orqaga" tugmasini shu tabga uzatadi: suhbat ochiq bo'lsa avval u yopiladi
+/// (ilova yopilib ketmasin).
+class MessagesScreenState extends State<MessagesScreen> {
   bool _loading = true;
   List<String> _classes = [];
   String? _selected;
+
+  /// Tab ichida ochiq suhbat bormi (qobiq "orqaga" mantiqi uchun).
+  bool get hasOpenChat => _selected != null;
+
+  /// Ochiq suhbatni yopadi. `true` — "orqaga" shu yerda ishlatildi.
+  bool handleBack() {
+    if (_selected == null) return false;
+    setState(() => _selected = null);
+    return true;
+  }
 
   @override
   void initState() {

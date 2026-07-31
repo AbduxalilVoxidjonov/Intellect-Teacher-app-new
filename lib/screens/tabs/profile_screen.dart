@@ -6,7 +6,6 @@ import '../../services/session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ui.dart';
 import '../account_screen.dart';
-import '../coverage_screen.dart';
 import '../evaluation_screen.dart';
 import '../feedback_screen.dart';
 import '../salary_screen.dart';
@@ -89,8 +88,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // «Testlar» bo'limi pastki navigatsiyaga ko'chirildi — menyuda takrorlanmaydi.
       _MenuItem('Maosh', 'Oylik hisob va tarix', Icons.account_balance_wallet_rounded, const Color(0xFF7C3AED),
           () => _open(const SalaryScreen())),
-      _MenuItem("O'quv dasturi", "Kurs dasturi bajarilishi", Icons.checklist_rounded, const Color(0xFF1F1F94),
-          () => _open(const CoverageScreen())),
+      // «O'quv dasturi» bo'limi HOZIRCHA olib tashlandi (keyinchalik qaytariladi).
+      // Backend chaqiruvlari (TeacherApi.groupCurriculum / setGroupCover /
+      // changeGroupRevision) ATAYLAB qoldirilgan — qaytarish oson bo'lsin.
       if (isSupport)
         _MenuItem('Support', "Bo'sh vaqt va bron darslari", Icons.support_agent_rounded, const Color(0xFF1F1F94),
             () => _open(const SupportScreen())),
