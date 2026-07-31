@@ -427,7 +427,10 @@ class TeacherApi {
     final res = await ApiClient.dio.get('/teacher/rating');
     _check(res);
     final data = res.data;
-    return data == null ? null : TeacherRating.fromJson(data as Map<String, dynamic>);
+    // Tana bo'sh kelishi ham mumkin (204 / bo'sh javob → dio `''` beradi, `null` emas):
+    // bunda `as Map` cast xatosi "Reytingni yuklab bo'lmadi" bo'lib ko'rinardi.
+    if (data is! Map) return null;
+    return TeacherRating.fromJson(Map<String, dynamic>.from(data));
   }
 
   /* ---------- Test natijalari (o'z guruhlari) ---------- */

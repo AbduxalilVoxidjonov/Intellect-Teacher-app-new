@@ -540,20 +540,37 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     // O'quvchi ismi to'liq (tag-ma-tag) chiqishi uchun har qatorning balandligini
     // o'lchaymiz va uni ham ism ustuni, ham katak qatoriga qo'llaymiz (moslashadi).
-    final nameStyle = DefaultTextStyle.of(context).style.copyWith(fontSize: 12, fontWeight: FontWeight.w600);
+    //
+    // DIQQAT: uslub ATAYLAB `DefaultTextStyle`dan MEROS OLMAYDI (`inherit: false`) va
+    // `decoration: none` bilan beriladi — meros olinganda FISH ostida SARIQ chiziq
+    // (Flutter'ning "Material'siz matn" ogohlantirish underline'i) ko'rinib qolardi.
+    final nameStyle = TextStyle(
+      inherit: false,
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      fontFamily: kTeacherFontFamily,
+      fontFamilyFallback: kTeacherFontFallback,
+      height: 1.25,
+      decoration: TextDecoration.none,
+      color: c.text,
+    );
     final scaler = MediaQuery.textScalerOf(context);
     double nameHeight(String name) {
       final tp = TextPainter(
         text: TextSpan(text: name.isEmpty ? '—' : name, style: nameStyle),
         textDirection: TextDirection.ltr,
         textScaler: scaler,
-      )..layout(maxWidth: nameW - 24);
+        // Haqiqiy joydan (118 − padding 20 − chegara 1.5 ≈ 96.5) TORROQ o'lchaymiz —
+        // shunda o'lchangan balandlik haqiqiysidan kam bo'lmaydi va matn qatordan
+        // "chiqib" ketmaydi (aks holda Flutter debug rejimida katak ostida SARIQ-qora
+        // "overflow" chizig'ini chizadi — FISH tagidagi sariq chiziq shundan).
+      )..layout(maxWidth: nameW - 28);
       return tp.height;
     }
 
     final heights = <String, double>{
-      // padding(12) + border(~2) + zaxira — ism har doim to'liq sig'adi.
-      for (final s in students) s.student.studentId: math.max(56.0, nameHeight(s.student.fullName) + 28),
+      // padding(12) + chegara(~2) + zaxira — ism har doim to'liq sig'adi.
+      for (final s in students) s.student.studentId: math.max(56.0, nameHeight(s.student.fullName) + 30),
     };
 
     return SCard(
@@ -876,6 +893,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
                   children: [
+                    // Qator raqami — jurnal jadvalidagi «№» ustuni bilan bir xil (web ham shunday).
+                    SizedBox(
+                      width: 24,
+                      child: Text('№',
+                          style: TextStyle(
+                              fontSize: 10, fontWeight: FontWeight.w800, color: c.faint, letterSpacing: 0.3)),
+                    ),
                     Expanded(
                       child: Text("O'QUVCHI",
                           style: TextStyle(
@@ -895,7 +919,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 ),
               ),
               Divider(height: 1, color: c.border),
-              for (final s in students) _attendanceRow(c, journal, s.student, lateIds),
+              for (var i = 0; i < students.length; i++)
+                _attendanceRow(c, journal, students[i].student, lateIds, i + 1),
             ],
           ),
         ),
@@ -915,6 +940,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     GroupJournal journal,
     GroupJournalStudent st,
     Set<String> lateIds,
+    int number,
   ) {
     // O'quvchi guruhga qo'shilgandan (memberStart) keyingi o'tilgan darslar.
     final myConducted = journal.conductedDates
@@ -950,6 +976,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       padding: const EdgeInsets.symmetric(vertical: 9),
       child: Row(
         children: [
+          SizedBox(
+            width: 24,
+            child: Text('$number',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: c.muted)),
+          ),
           Expanded(
             child: Text(
               st.fullName,

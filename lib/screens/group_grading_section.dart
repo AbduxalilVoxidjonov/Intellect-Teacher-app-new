@@ -419,9 +419,19 @@ class _GroupGradingSectionState extends State<GroupGradingSection> {
     const headH = 54.0;
 
     final perStudent = board.dates.length * board.criteria.length;
-    final nameStyle = DefaultTextStyle.of(context)
-        .style
-        .copyWith(fontSize: 12, fontWeight: FontWeight.w600, color: c.text);
+    // Uslub `DefaultTextStyle`dan MEROS OLMAYDI (`inherit: false`) — meros olinganda
+    // ism ostida begona chiziq (underline) paydo bo'lishi mumkin; jurnal jadvalidagi
+    // ism ustuni bilan bir xil qoida.
+    final nameStyle = TextStyle(
+      inherit: false,
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      fontFamily: kTeacherFontFamily,
+      fontFamilyFallback: kTeacherFontFallback,
+      height: 1.25,
+      decoration: TextDecoration.none,
+      color: c.text,
+    );
     final scaler = MediaQuery.textScalerOf(context);
 
     // Ism to'liq (tag-ma-tag) chiqishi uchun har qatorning balandligini o'lchaymiz —

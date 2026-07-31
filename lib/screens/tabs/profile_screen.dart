@@ -6,7 +6,6 @@ import '../../services/session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ui.dart';
 import '../account_screen.dart';
-import '../evaluation_screen.dart';
 import '../feedback_screen.dart';
 import '../salary_screen.dart';
 import '../support_screen.dart';
@@ -83,8 +82,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isSupport = _profile?.isSupport == true;
 
     final menu = <_MenuItem>[
-      _MenuItem('Baholash', "O'quvchilarni baholash", Icons.grade_rounded, const Color(0xFF1F1F94),
-          () => _open(const EvaluationScreen())),
+      // «Baholash» olib tashlandi — baholash guruh (jurnal) sahifasidagi «Baholash»
+      // tabida bajariladi. DIQQAT: bu ikkisi turli backend bo'limlari edi — profildagisi
+      // /teacher/evaluation (baholash turlari bo'yicha 1–5 baho), jurnaldagisi
+      // /teacher/grading (mezonlar bo'yicha bajardi/bajarmadi). API metodlari
+      // (TeacherApi.evalTypes / evalBoard / setEvalGrade) qaytarish uchun qoldirildi.
       // «Testlar» bo'limi pastki navigatsiyaga ko'chirildi — menyuda takrorlanmaydi.
       _MenuItem('Maosh', 'Oylik hisob va tarix', Icons.account_balance_wallet_rounded, const Color(0xFF7C3AED),
           () => _open(const SalaryScreen())),
