@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(android --version)",
+      "Bash(android skills *)"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Logo foni rangi (navy) — ikona, splash va login foni shu rangda -->
+    <color name="ic_launcher_background">#020066</color>
+    <!-- Bildirishnoma aksent rangi -->
+    <color name="notification_color">#020066</color>
+</resources>

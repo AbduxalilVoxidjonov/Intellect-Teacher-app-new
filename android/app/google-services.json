@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "499771520439",
+    "project_id": "intellectcrm",
+    "storage_bucket": "intellectcrm.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:499771520439:android:a9e3bafa80d95958f36432",
+        "android_client_info": {
+          "package_name": "uz.callsentry"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApgtAD6vuhCtGrR5JFLpMXPsBOYTvIhu0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:499771520439:android:1558fb082e7e0bd2f36432",
+        "android_client_info": {
+          "package_name": "uz.intellectcrm.teacher"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApgtAD6vuhCtGrR5JFLpMXPsBOYTvIhu0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:499771520439:android:a3712b003e5a2c1ef36432",
+        "android_client_info": {
+          "package_name": "uz.intellectschool.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApgtAD6vuhCtGrR5JFLpMXPsBOYTvIhu0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
