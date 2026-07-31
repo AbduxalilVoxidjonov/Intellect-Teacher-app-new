@@ -308,7 +308,17 @@ class _ChatViewState extends State<_ChatView> {
                       itemCount: _messages.length,
                       itemBuilder: (context, i) {
                         final m = _messages[i];
-                        return _Bubble(msg: m, isMe: myId != null && m.senderUserId == myId);
+                        // Kunlar SANA ajratgichi bilan bo'linadi: xabarning kuni
+                        // avvalgisidan farq qilsa (yoki bu birinchi xabar bo'lsa),
+                        // tepasida "Bugun / Kecha / 12 Iyul" yozuvi chiqadi.
+                        final showDate =
+                            i == 0 || !_sameDay(_messages[i - 1].createdAt, m.createdAt);
+                        final bubble = _Bubble(msg: m, isMe: myId != null && m.senderUserId == myId);
+                        if (!showDate) return bubble;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [_DateDivider(iso: m.createdAt), bubble],
+                        );
                       },
                     ),
         ),
@@ -359,6 +369,58 @@ class _ChatViewState extends State<_ChatView> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Ikki ISO vaqt bir XIL kunga tegishlimi (mahalliy vaqt bo'yicha).
+bool _sameDay(String? a, String? b) {
+  final x = DateTime.tryParse(a ?? '')?.toLocal();
+  final y = DateTime.tryParse(b ?? '')?.toLocal();
+  if (x == null || y == null) return x == null && y == null;
+  return x.year == y.year && x.month == y.month && x.day == y.day;
+}
+
+/// Suhbatdagi kun ajratgichi — "Bugun" / "Kecha" / "12 Iyul" (o'tgan yil bo'lsa yil ham).
+class _DateDivider extends StatelessWidget {
+  final String iso;
+  const _DateDivider({required this.iso});
+
+  String _label() {
+    final d = DateTime.tryParse(iso)?.toLocal();
+    if (d == null) return '';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(d.year, d.month, d.day);
+    final diff = today.difference(day).inDays;
+    if (diff == 0) return 'Bugun';
+    if (diff == 1) return 'Kecha';
+    final base = fmtDate(iso);
+    return d.year == now.year ? base : '$base, ${d.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: c.border, height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(10)),
+              child: Text(
+                _label(),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.muted),
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: c.border, height: 1)),
+        ],
+      ),
     );
   }
 }

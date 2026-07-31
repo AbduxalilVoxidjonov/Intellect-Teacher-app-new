@@ -22,6 +22,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loading = true;
   TeacherProfile? _profile;
   TeacherSchoolInfo? _school;
+  /// Profil kartasida ko'rsatiladigan guruhlar (fanlar o'rniga).
+  List<TeacherClass> _classes = [];
 
   @override
   void initState() {
@@ -39,10 +41,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       } catch (_) {
         school = null;
       }
+      // Guruhlar profil kartasida ko'rsatiladi — yuklanmasa karta baribir chiqadi.
+      List<TeacherClass> classes = const [];
+      try {
+        classes = await TeacherApi.myClasses();
+      } catch (_) {
+        classes = const [];
+      }
       if (!mounted) return;
       setState(() {
         _profile = profile;
         _school = school;
+        _classes = classes;
         _loading = false;
       });
     } catch (_) {
@@ -174,7 +184,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 10),
                     SChip("O'qituvchi", color: c.accentD, bg: c.accentSoft),
                     const SizedBox(height: 16),
-                    _infoRow(c, Icons.menu_book_rounded, 'Fanlar', subjectsLabel),
+                    // Fanlar o'rniga GURUHLAR — har biri tag-ma-tag (alohida qatorda).
+                    _groupsRow(c),
                     if (_school != null && _school!.name.isNotEmpty)
                       _infoRow(c, Icons.apartment_rounded, 'Markaz', _school!.name),
                   ],
@@ -191,6 +202,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: c.surface, width: 4)),
                 child: Avatar(name: fullName.isEmpty ? 'O' : fullName, size: avatarSize),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// O'qituvchi guruhlari — nomlari tag-ma-tag (har biri alohida qatorda).
+  /// Fanlar ATAYLAB ko'rsatilmaydi (guruh nomi yetarli).
+  Widget _groupsRow(AppColors c) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(Icons.groups_rounded, size: 17, color: c.muted),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Guruhlar', style: TextStyle(fontSize: 11, color: c.muted)),
+                if (_classes.isEmpty)
+                  Text(
+                    _loading ? '—' : "Guruh biriktirilmagan",
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.faint),
+                  )
+                else
+                  for (final g in _classes)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: Text(
+                        g.className,
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.text, height: 1.35),
+                      ),
+                    ),
+              ],
             ),
           ),
         ],
