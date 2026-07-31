@@ -6,6 +6,7 @@ import '../../services/session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ui.dart';
 import '../account_screen.dart';
+import '../contracts_screen.dart';
 import '../feedback_screen.dart';
 import '../salary_screen.dart';
 import '../support_screen.dart';
@@ -106,6 +107,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (isSupport)
         _MenuItem('Support', "Bo'sh vaqt va bron darslari", Icons.support_agent_rounded, const Color(0xFF1F1F94),
             () => _open(const SupportScreen())),
+      // Tuzilgan shartnomalarning elektron (PDF) nusxalari — faqat ko'rish.
+      _MenuItem('Shartnoma', 'Elektron nusxalar', Icons.description_outlined, const Color(0xFF0D9488),
+          () => _open(const ContractsScreen())),
       _MenuItem('Taklif va shikoyat', 'Adminga xabar yuborish', Icons.chat_bubble_outline_rounded,
           const Color(0xFF1F1F94), () => _open(const FeedbackScreen())),
       _MenuItem('Akkaunt', 'Profil va xavfsizlik', Icons.lock_outline_rounded, const Color(0xFF64748B),

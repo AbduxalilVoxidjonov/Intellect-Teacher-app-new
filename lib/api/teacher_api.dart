@@ -523,4 +523,19 @@ class TeacherApi {
     _check(res);
     return TestResultDetail.fromJson(res.data as Map<String, dynamic>);
   }
+
+  /* ---------- Shartnoma (faqat o'ziniki) ---------- */
+
+  /// O'qituvchi bilan tuzilgan shartnomalar (raqam bo'yicha kamayish tartibida).
+  /// Faqat superadmin "ilovada ko'rinsin" deb belgilagan yozuvlar qaytadi.
+  static Future<List<ContractDoc>> contracts() async {
+    final res = await ApiClient.dio.get('/teacher/contracts');
+    _check(res);
+    final data = res.data;
+    // Tana bo'sh kelishi mumkin (204 / bo'sh javob → dio `''` beradi, `null` emas).
+    if (data is! List) return <ContractDoc>[];
+    return data
+        .map((e) => ContractDoc.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
 }

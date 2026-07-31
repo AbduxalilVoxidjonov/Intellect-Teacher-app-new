@@ -1622,3 +1622,76 @@ class TestResultDetail {
         online: OnlineTest.parse(j['online']),
       );
 }
+
+/* ---------- Shartnoma (elektron nusxa) ---------- */
+
+/// Tuzilgan shartnoma hujjati — backend `ContractDocDto`.
+/// Ilovada faqat o'qish uchun: ro'yxat + PDF ochish.
+class ContractDoc {
+  final String id;
+  final int number;
+
+  /// "Shartnoma № 12" ko'rinishidagi tayyor sarlavha.
+  final String title;
+
+  /// "parent" | "staff" — o'qituvchi ilovasida doim "staff".
+  final String target;
+  final String recipientKey;
+  final String recipientName;
+
+  /// Andoza nomi (tarixiy nusxa — andoza o'chirilsa ham qoladi).
+  final String templateName;
+
+  /// Tuzilgan sana (ISO).
+  final String date;
+
+  /// Saqlangan PDF ("/uploads/...") — eski yozuvlarda bo'sh bo'lishi mumkin.
+  final String pdfUrl;
+  final String docxUrl;
+
+  /// Imzolangan skan (PDF) — bo'lsa shu ochiladi.
+  final String signedUrl;
+  final bool signed;
+  final bool delivered;
+  final String status;
+
+  ContractDoc({
+    required this.id,
+    required this.number,
+    required this.title,
+    required this.target,
+    required this.recipientKey,
+    required this.recipientName,
+    required this.templateName,
+    required this.date,
+    required this.pdfUrl,
+    required this.docxUrl,
+    required this.signedUrl,
+    required this.signed,
+    required this.delivered,
+    required this.status,
+  });
+
+  /// Ochish uchun manzil — imzolangan nusxa bo'lsa u ustun, aks holda PDF.
+  /// Ikkalasi ham bo'sh bo'lsa (eski yozuv) — fayl mavjud emas.
+  String get fileUrl => signedUrl.isNotEmpty ? signedUrl : pdfUrl;
+
+  bool get hasFile => fileUrl.isNotEmpty;
+
+  factory ContractDoc.fromJson(Map<String, dynamic> j) => ContractDoc(
+        id: _s(j['id']),
+        number: _i(j['number']),
+        title: _s(j['title']),
+        target: _s(j['target']),
+        recipientKey: _s(j['recipientKey']),
+        recipientName: _s(j['recipientName']),
+        templateName: _s(j['templateName']),
+        date: _s(j['date']),
+        pdfUrl: _s(j['pdfUrl']),
+        docxUrl: _s(j['docxUrl']),
+        signedUrl: _s(j['signedUrl']),
+        signed: _b(j['signed']),
+        delivered: _b(j['delivered']),
+        status: _s(j['status']),
+      );
+}
