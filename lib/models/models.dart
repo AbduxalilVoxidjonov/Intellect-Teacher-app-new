@@ -1645,15 +1645,17 @@ class ContractDoc {
   /// Tuzilgan sana (ISO).
   final String date;
 
-  /// Saqlangan PDF ("/uploads/...") — eski yozuvlarda bo'sh bo'lishi mumkin.
+  /// Superadmin yuklagan PDF ("/uploads/...") — ilovada shu ochiladi.
+  /// Server faqat PDF'i bor yozuvlarni qaytargani uchun doim to'ldirilgan.
   final String pdfUrl;
-  final String docxUrl;
 
-  /// Imzolangan skan (PDF) — bo'lsa shu ochiladi.
-  final String signedUrl;
-  final bool signed;
+  /// Tizim hosil qilgan Word nusxa (admin panelida ishlatiladi).
+  final String docxUrl;
   final bool delivered;
   final String status;
+
+  /// Oluvchiga ko'rsatish belgisi — serverning o'zi filtrlab beradi.
+  final bool visible;
 
   ContractDoc({
     required this.id,
@@ -1666,17 +1668,10 @@ class ContractDoc {
     required this.date,
     required this.pdfUrl,
     required this.docxUrl,
-    required this.signedUrl,
-    required this.signed,
     required this.delivered,
     required this.status,
+    required this.visible,
   });
-
-  /// Ochish uchun manzil — imzolangan nusxa bo'lsa u ustun, aks holda PDF.
-  /// Ikkalasi ham bo'sh bo'lsa (eski yozuv) — fayl mavjud emas.
-  String get fileUrl => signedUrl.isNotEmpty ? signedUrl : pdfUrl;
-
-  bool get hasFile => fileUrl.isNotEmpty;
 
   factory ContractDoc.fromJson(Map<String, dynamic> j) => ContractDoc(
         id: _s(j['id']),
@@ -1689,9 +1684,8 @@ class ContractDoc {
         date: _s(j['date']),
         pdfUrl: _s(j['pdfUrl']),
         docxUrl: _s(j['docxUrl']),
-        signedUrl: _s(j['signedUrl']),
-        signed: _b(j['signed']),
         delivered: _b(j['delivered']),
         status: _s(j['status']),
+        visible: _b(j['visible']),
       );
 }

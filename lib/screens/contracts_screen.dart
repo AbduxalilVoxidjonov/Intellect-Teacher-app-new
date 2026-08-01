@@ -10,8 +10,8 @@ import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 
 /// Shartnoma — o'qituvchi bilan tuzilgan shartnomalarning elektron (PDF) nusxalari.
-/// Backend: `GET /teacher/contracts`. Kartochka bosilganda PDF tashqi ilovada ochiladi.
-/// Eski yozuvlarda saqlangan fayl bo'lmasligi mumkin — bunday kartochka o'chirilgan.
+/// Backend: `GET /teacher/contracts` — faqat superadmin PDF yuklagan shartnomalar keladi,
+/// shuning uchun har bir kartochka bosiladi va PDF tashqi ilovada ochiladi.
 class ContractsScreen extends StatefulWidget {
   const ContractsScreen({super.key});
   @override
@@ -114,11 +114,10 @@ class _ContractsScreenState extends State<ContractsScreen> {
   }
 
   Widget _card(AppColors c, ContractDoc doc) {
-    final has = doc.hasFile;
     final title = doc.title.isNotEmpty ? doc.title : 'Shartnoma № ${doc.number}';
-    final card = SCard(
+    return SCard(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      onTap: has ? () => _openFile(doc.fileUrl) : null,
+      onTap: () => _openFile(doc.pdfUrl),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -127,32 +126,18 @@ class _ContractsScreenState extends State<ContractsScreen> {
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: has ? c.accentSoft : c.surface3,
+              color: c.accentSoft,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              has ? Icons.picture_as_pdf_rounded : Icons.insert_drive_file_outlined,
-              size: 20,
-              color: has ? c.accent : c.faint,
-            ),
+            child: Icon(Icons.picture_as_pdf_rounded, size: 20, color: c.accent),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(title,
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: c.text)),
-                    ),
-                    if (doc.signed) ...[
-                      const SizedBox(width: 6),
-                      SChip('Imzolangan', color: c.green, bg: c.greenSoft),
-                    ],
-                  ],
-                ),
+                Text(title,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: c.text)),
                 const SizedBox(height: 3),
                 Text(
                   fmtDate(doc.date),
@@ -167,27 +152,17 @@ class _ContractsScreenState extends State<ContractsScreen> {
                     style: TextStyle(fontSize: 12, color: c.faint),
                   ),
                 ],
-                if (!has) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    'Fayl mavjud emas',
-                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: c.faint),
-                  ),
-                ],
               ],
             ),
           ),
-          if (has) ...[
-            const SizedBox(width: 6),
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Icon(Icons.chevron_right_rounded, color: c.faint),
-            ),
-          ],
+          const SizedBox(width: 6),
+          // Bosilganda PDF yuklab olinadi/ochiladi — shunga ishora.
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Icon(Icons.download_rounded, size: 20, color: c.faint),
+          ),
         ],
       ),
     );
-    // Fayl saqlanmagan (eski) yozuv — kartochka o'chirilgan holatda ko'rinadi.
-    return has ? card : Opacity(opacity: 0.55, child: card);
   }
 }
