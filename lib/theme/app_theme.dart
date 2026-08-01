@@ -144,3 +144,21 @@ ThemeData buildMaterialTheme(AppColors c) {
     dividerColor: c.border,
   );
 }
+
+/// 2 va undan ortiq oy uchun qarzi bor o'quvchi — eng og'ir holat, QIZILDAN USTUN.
+/// Web'dagi `HEAVY_DEBT_MONTHS` (lib/utils.ts) bilan bir xil chegara.
+const int kHeavyDebtMonths = 2;
+
+/// Binafsha-pushti — Tailwind `fuchsia-600` (web `text-fuchsia-600` bilan aynan bir xil).
+const Color kHeavyDebtColor = Color(0xFFC026D3);
+
+/// Jurnal/ro'yxatdagi o'quvchi ismi rangi:
+///   2+ oylik qarz → binafsha-pushti · qarzdor → qizil · aks holda yashil.
+/// Web `balanceTextCls(balance, debtMonths)` bilan AYNAN bir xil qoida — ikki joyda
+/// alohida shart yozilmasin (ilgari ranglar ikkita ekranda qo'lda takrorlangan edi).
+/// DIQQAT: `balance` ham, `debtMonths` ham SHU GURUH bo'yicha (boshqa guruhdagi qarz
+/// bu yerni bo'yamaydi) — server `GroupBalanceService` orqali shunday yuboradi.
+Color balanceColor(AppColors c, double balance, int debtMonths) {
+  if (debtMonths >= kHeavyDebtMonths) return kHeavyDebtColor;
+  return balance < 0 ? c.red : c.green;
+}

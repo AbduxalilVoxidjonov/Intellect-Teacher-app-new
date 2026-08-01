@@ -646,12 +646,18 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                             right: BorderSide(color: c.border, width: 1.5),
                           ),
                         ),
-                        // Rang: qarzdor (balance<0) QIZIL, to'lagan YASHIL — web bilan bir xil.
-                        // MUHIM: balance SHU GURUH bo'yicha (boshqa guruhdagi qarz bu yerni qizil qilmaydi).
+                        // Rang: 2+ oylik qarz BINAFSHA-PUSHTI, qarzdor QIZIL, to'lagan YASHIL —
+                        // web bilan bir xil (`balanceColor`, app_theme.dart).
+                        // MUHIM: balans ham, qarz oylari ham SHU GURUH bo'yicha (boshqa
+                        // guruhdagi qarz bu yerni bo'yamaydi).
                         child: Text(
                           students[i].student.fullName,
                           style: nameStyle.copyWith(
-                            color: students[i].student.balance < 0 ? c.red : c.green,
+                            color: balanceColor(
+                              c,
+                              students[i].student.balance,
+                              students[i].student.debtMonths,
+                            ),
                           ),
                         ),
                       ),
@@ -985,11 +991,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             child: Text(
               st.fullName,
               maxLines: 2,
-              // Web bilan bir xil: qarzdor qizil, to'lagan yashil (shu guruh bo'yicha).
+              // Web bilan bir xil: 2+ oylik qarz binafsha-pushti, qarzdor qizil,
+              // to'lagan yashil (hammasi SHU GURUH bo'yicha).
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: st.balance < 0 ? c.red : c.green,
+                color: balanceColor(c, st.balance, st.debtMonths),
               ),
             ),
           ),

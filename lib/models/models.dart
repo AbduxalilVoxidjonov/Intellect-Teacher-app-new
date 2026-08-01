@@ -964,6 +964,10 @@ class GroupJournalStudent {
   /** Muzlatilgan sana (bo'sh = muzlatilmagan) */
   final String frozenAt;
 
+  /** SHU GURUH bo'yicha to'liq yopilmagan (qarzdor) oylar soni. 2 va undan ko'p bo'lsa
+      ism binafsha-pushti rangda ko'rsatiladi (web bilan bir xil, `HEAVY_DEBT_MONTHS`). */
+  final int debtMonths;
+
   GroupJournalStudent({
     required this.studentId,
     required this.fullName,
@@ -973,6 +977,7 @@ class GroupJournalStudent {
     required this.memberStart,
     this.presentDefaultFrom = '',
     this.frozenAt = '',
+    this.debtMonths = 0,
   });
 
   factory GroupJournalStudent.fromJson(Map<String, dynamic> j) => GroupJournalStudent(
@@ -984,6 +989,7 @@ class GroupJournalStudent {
         memberStart: _s(j['memberStart']),
         presentDefaultFrom: _s(j['presentDefaultFrom']),
         frozenAt: _s(j['frozenAt']),
+        debtMonths: _i(j['debtMonths']),
       );
 }
 
