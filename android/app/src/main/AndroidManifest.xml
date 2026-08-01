@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <!-- Bildirishnoma (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Bildirishnoma kelganda tebranish (ovoz bilan birga) -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
     <!-- Kamera (taklif-shikoyatga rasm olish uchun). Galereya esa Android Photo
          Picker orqali ishlaydi — READ_MEDIA_IMAGES / storage ruxsati KERAK EMAS. -->
     <uses-permission android:name="android.permission.CAMERA"/>
@@ -44,10 +46,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- FCM: background/yopiq holatda push shu kanalda ko'rsatiladi (ovoz + heads-up). -->
+        <!-- FCM: background/yopiq holatda push shu kanalda ko'rsatiladi (ovoz + heads-up).
+             DIQQAT: qiymat lib/services/push.dart'dagi `kPushChannelId` bilan bir xil
+             bo'lishi shart. Kanal sozlamalari yaratilgach o'zgarmaydi — ovoz/importance
+             o'zgartirilsa ID ham yangilanadi (_v3 → _v4). -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="intellect_teacher_v2" />
+            android:value="intellect_teacher_v3" />
         <!-- FCM: bildirishnoma status bar ikonasi (oq siluet) va rangi. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"

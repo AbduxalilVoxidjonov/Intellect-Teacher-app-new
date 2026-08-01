@@ -55,6 +55,13 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Push: ilova fonda bo'lganda ham xabar yetib borishi uchun.
+	     Bundan tashqari Xcode → Signing & Capabilities → "Push Notifications"
+	     qo'shilgan bo'lishi shart (aps-environment entitlement). -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
