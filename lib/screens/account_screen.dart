@@ -32,6 +32,8 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _submit() async {
+    // TUZATILDI (P2): ikki marta bosilsa ikkita so'rov ketardi.
+    if (_busy) return;
     setState(() => _error = null);
     if (_current.text.isEmpty || _next.text.isEmpty || _repeat.text.isEmpty) {
       setState(() => _error = "Barcha maydonlarni to'ldiring");
@@ -60,6 +62,10 @@ class _AccountScreenState extends State<AccountScreen> {
         return;
       }
       if (!mounted) return;
+      // TUZATILDI (P2): muvaffaqiyatda `_busy` hech qachon `false` bo'lmasdi —
+      // `maybePop()` hech narsa qilmasa (ekran stack'ning ildizi bo'lsa) tugma
+      // ABADIY o'chiq qolardi.
+      setState(() => _busy = false);
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text("Parol o'zgartirildi")));
       await Future.delayed(const Duration(milliseconds: 500));

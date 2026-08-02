@@ -15,7 +15,13 @@ const _weekdays = [
 /// DIQQAT: avval ilovada "svetofor" (3 = sariq, 1–2 = qizil) ishlatilgan edi — shu sababli
 /// jurnalda 3 baho olgan o'quvchi katagi sariq ko'rinardi. Web/PWA'da bunday emas.
 int _gradeStep(num g) {
-  final s = g.round() - 1;
+  final d = g.toDouble();
+  // TUZATILDI (BUG-F1): `round()` NaN/±Infinity uchun UnsupportedError tashlardi.
+  // Bu funksiya `build()` ichidan chaqiriladi, ya'ni xato tutilmasdan QIZIL EKRAN
+  // beradi. Shuning uchun yaroqsiz qiymat chegaraga qisiladi.
+  if (d.isNaN) return 0;
+  if (d.isInfinite) return d > 0 ? 4 : 0;
+  final s = d.round() - 1;
   return s < 0 ? 0 : (s > 4 ? 4 : s);
 }
 
@@ -64,16 +70,36 @@ Color subjectColor(String key) {
   return _subjPalette[hash % _subjPalette.length];
 }
 
+/// Qiymat yo'q/yaroqsiz bo'lganda ko'rsatiladigan belgi.
+const String kNoValueDash = '—';
+
+/// Harf (istalgan alifbo) bo'lgan yagona belgimi.
+final RegExp _letterRe = RegExp(r'^\p{L}$', unicode: true);
+
 /// FISHdan bosh harflar (max 2).
+///
+/// TUZATILDI (BUG-F7): avval `w[0]` UTF-16 kod BIRLIGINI olardi — emoji bilan
+/// boshlangan ism surrogat juftlikni bo'lib yuborardi (avatarda "tofu"). Endi
+/// `runes` ishlatiladi va harf bilan boshlanmagan bo'lak (emoji, tinish belgisi)
+/// umuman hisobga olinmaydi: `initials('- -')` → `'?'`.
 String initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
-  if (parts.isEmpty) return '?';
-  return parts.take(2).map((w) => w[0]).join().toUpperCase();
+  final parts = name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty);
+  final out = <String>[];
+  for (final w in parts) {
+    final ch = String.fromCharCode(w.runes.first);
+    if (!_letterRe.hasMatch(ch)) continue;
+    out.add(ch.toUpperCase());
+    if (out.length == 2) break;
+  }
+  return out.isEmpty ? '?' : out.join();
 }
 
 /// Pulni "850 000" ko'rinishida (manfiy uchun "−").
 String fmtMoney(num n, {bool withSign = false}) {
   final val = n.toDouble();
+  // TUZATILDI (BUG-F2): NaN/±Infinity `round()` da UnsupportedError berardi
+  // (build ichida — qizil ekran). Endi qiymat yo'q belgisi qaytadi.
+  if (!val.isFinite) return kNoValueDash;
   final abs = val.abs().round();
   final s = abs.toString();
   final buf = StringBuffer();
@@ -81,7 +107,9 @@ String fmtMoney(num n, {bool withSign = false}) {
     if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
     buf.write(s[i]);
   }
-  final sign = val < 0 ? '−' : (withSign && val > 0 ? '+' : '');
+  // TUZATILDI (BUG-F3): belgi YAXLITLANGAN qiymatdan olinadi, aks holda
+  // -0.4 → "−0" ("Qoldi: −0") bo'lib chiqardi.
+  final sign = abs == 0 ? '' : (val < 0 ? '−' : (withSign ? '+' : ''));
   return '$sign$buf';
 }
 
@@ -94,7 +122,9 @@ DateTime? _parse(String? iso) {
 /// "12 Mart" yoki weekday=true bo'lsa "12 Mart, Dushanba".
 String fmtDate(String? iso, {bool weekday = false}) {
   final d = _parse(iso);
-  if (d == null) return iso ?? '';
+  // TUZATILDI (BUG-F9): xom satr `trim` qilinadi — `fmtTime` bilan izchil
+  // bo'lishi uchun (faqat probelli kirish bo'sh satr beradi).
+  if (d == null) return iso?.trim() ?? '';
   final wd = (d.weekday + 6) % 7; // Dushanba=0
   var s = '${d.day} ${_months[d.month - 1]}';
   if (weekday) s += ', ${_weekdays[wd]}';
@@ -105,7 +135,10 @@ String fmtDate(String? iso, {bool weekday = false}) {
 String fmtMonth(String? ym) {
   if (ym == null || ym.length < 7) return ym ?? '';
   final m = int.tryParse(ym.substring(5, 7)) ?? 0;
-  return '${m >= 1 && m <= 12 ? _months[m - 1] : ym} ${ym.substring(0, 4)}';
+  // TUZATILDI (BUG-F4): yaroqsiz oyda avval XOM satr + yil qo'shilib
+  // "2026-13 2026" chiqardi. Endi xom satrning o'zi qaytadi.
+  if (m < 1 || m > 12) return ym;
+  return '${_months[m - 1]} ${ym.substring(0, 4)}';
 }
 
 /// "HH:mm".

@@ -27,11 +27,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     if (_loading) return;
+    // BUG-S7: bo'sh maydonlar bilan haqiqiy POST ketardi va serverning 401'i
+    // "Login yoki parol noto'g'ri" bo'lib ko'rinardi — bu chalg'ituvchi.
+    // Avval MAHALLIY tekshiramiz, so'rov umuman yuborilmaydi.
+    final email = _email.text.trim();
+    final password = _password.text;
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Login va parolni kiriting');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
-    final err = await context.read<Session>().login(_email.text, _password.text);
+    final err = await context.read<Session>().login(email, password);
     if (!mounted) return;
     setState(() {
       _loading = false;

@@ -64,7 +64,14 @@ class _ShellScreenState extends State<ShellScreen> {
       return;
     }
     if (_index != 0) {
-      setState(() => _index = 0);
+      // TUZATILDI: avval faqat `_index` o'zgarardi va `_history` desinxronlashib
+      // qolardi (keyingi "orqaga" allaqachon ochiq turgan tabga qaytarardi).
+      setState(() {
+        _index = 0;
+        _history
+          ..clear()
+          ..add(0);
+      });
       return;
     }
 
@@ -107,7 +114,18 @@ class _ShellScreenState extends State<ShellScreen> {
         backgroundColor: c.bg,
         body: SafeArea(
           bottom: false,
-          child: IndexedStack(index: _index, children: _screens),
+          // TUZATILDI (P1-8): `IndexedStack` tabni dispose qilmaydi va uning
+          // `Visibility` o'rami `maintainAnimation: true` beradi — ya'ni
+          // ko'rinmayotgan tab ham "tirik". Har bir tabni `TickerMode` bilan
+          // o'raymiz, shunda faol bo'lmagan tab (masalan chat polleri) o'z
+          // taymerini to'xtata oladi.
+          child: IndexedStack(
+            index: _index,
+            children: [
+              for (int i = 0; i < _screens.length; i++)
+                TickerMode(enabled: _index == i, child: _screens[i]),
+            ],
+          ),
         ),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(

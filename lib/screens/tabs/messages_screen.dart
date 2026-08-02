@@ -193,7 +193,7 @@ class _ChatView extends StatefulWidget {
   State<_ChatView> createState() => _ChatViewState();
 }
 
-class _ChatViewState extends State<_ChatView> {
+class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   bool _loading = true;
   List<ChatMessage> _messages = [];
   final _controller = TextEditingController();
@@ -201,37 +201,112 @@ class _ChatViewState extends State<_ChatView> {
   Timer? _timer;
   bool _sending = false;
 
+  /// So'rov ketmoqdami — 4 soniyalik taymer sekin tarmoqda ikkinchi so'rovni
+  /// boshlab yubormasligi uchun (P1-7).
+  bool _fetching = false;
+
+  /// Ko'rsatilgan xabar id'lari — takrorlanishning oldini oladi (P1-7).
+  final Set<String> _seenIds = <String>{};
+
+  /// Bu tab ekranda ko'rinyaptimi (`TickerMode`, qobiqdagi `IndexedStack`).
+  bool _visible = true;
+
+  /// Ilova oldingi planda turibdimi.
+  bool _resumed = true;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load(initial: true);
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) => _load());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // `IndexedStack` tabni DISPOSE qilmaydi, shuning uchun ko'rinishni
+    // `TickerMode` orqali bilamiz (qobiq har bir tabni shunga o'raydi).
+    final v = TickerMode.valuesOf(context).enabled;
+    if (v != _visible) {
+      _visible = v;
+    }
+    _syncTimer();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // P1-8: ilova fonda bo'lganda poller ishlamasin (soatiga ~900 so'rov).
+    final resumed = state == AppLifecycleState.resumed;
+    if (resumed == _resumed) return;
+    _resumed = resumed;
+    _syncTimer();
+    if (resumed) _load();
+  }
+
+  /// Poller faqat tab KO'RINIB turganda va ilova oldingi planda bo'lganda ishlaydi.
+  void _syncTimer() {
+    final shouldPoll = _visible && _resumed;
+    if (shouldPoll) {
+      _timer ??= Timer.periodic(const Duration(seconds: 4), (_) => _load());
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _load({bool initial = false}) async {
+    // P1-7: oldingi so'rov tugamaguncha yangisi boshlanmaydi.
+    if (_fetching) return;
+    _fetching = true;
     try {
       final since = _messages.isEmpty ? null : _messages.last.createdAt;
       final fetched = await TeacherApi.chat(widget.className, since: since);
       if (!mounted) return;
+      // U17: foydalanuvchi tepaga aylantirgan bo'lsa pastga TORTIB tushirilmaydi.
+      final pinned = _atBottom();
       if (since == null) {
-        setState(() => _messages = fetched);
+        setState(() {
+          _messages = fetched;
+          _seenIds
+            ..clear()
+            ..addAll(fetched.map(_keyOf));
+        });
         _scrollToBottom();
-      } else if (fetched.isNotEmpty) {
-        setState(() => _messages = [..._messages, ...fetched]);
-        _scrollToBottom();
+      } else {
+        // P1-7: `id` bo'yicha dedupe — sekin tarmoqda bir xil xabar ikki marta
+        // kelishi mumkin (`since` chegarasi inklyuziv bo'lgani uchun ham).
+        final fresh = fetched.where((m) => _seenIds.add(_keyOf(m))).toList();
+        if (fresh.isNotEmpty) {
+          setState(() => _messages = [..._messages, ...fresh]);
+          if (pinned) _scrollToBottom();
+        }
       }
     } catch (_) {
     } finally {
+      _fetching = false;
       if (initial && mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Dedupe kaliti — `id` bo'sh kelsa mazmuni bo'yicha (server eski bo'lsa ham
+  /// takrorlanmasin).
+  String _keyOf(ChatMessage m) =>
+      m.id.isNotEmpty ? m.id : '${m.senderUserId}|${m.createdAt}|${m.text}';
+
+  /// Ro'yxat pastki chekkasidami (kichik zaxira bilan).
+  bool _atBottom() {
+    if (!_scrollController.hasClients) return true;
+    final p = _scrollController.position;
+    return p.pixels >= p.maxScrollExtent - 48;
   }
 
   void _scrollToBottom() {
@@ -244,16 +319,20 @@ class _ChatViewState extends State<_ChatView> {
   Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending) return;
+    // U17: matn `await`dan OLDIN olinadi va tozalanadi — javob kelguncha
+    // yozilgan yangi matn o'chib ketmasin.
+    _controller.clear();
     setState(() => _sending = true);
     try {
       final msg = await TeacherApi.sendChat(widget.className, text);
       if (!mounted) return;
-      setState(() {
-        _messages = [..._messages, msg];
-        _controller.clear();
-      });
+      if (_seenIds.add(_keyOf(msg))) {
+        setState(() => _messages = [..._messages, msg]);
+      }
       _scrollToBottom();
     } catch (_) {
+      // Yuborilmadi — matn yo'qolmasin (foydalanuvchi yangisini yozmagan bo'lsa).
+      if (mounted && _controller.text.isEmpty) _controller.text = text;
     } finally {
       if (mounted) setState(() => _sending = false);
     }

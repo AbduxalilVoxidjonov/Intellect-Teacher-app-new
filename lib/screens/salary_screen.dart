@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../api/api_client.dart';
 import '../api/teacher_api.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -19,6 +20,11 @@ class _SalaryScreenState extends State<SalaryScreen> {
   bool _loading = true;
   String? _expanded;
 
+  /// P1-13: TARMOQ xatosi "maosh yo'q" DEGANI EMAS — puli bor o'qituvchiga
+  /// "hisoblangan oylik mavjud emas" deyish mumkin emas. Shuning uchun xato
+  /// haqiqiy bo'sh holatdan alohida saqlanadi.
+  String? _error;
+
   @override
   void initState() {
     super.initState();
@@ -28,9 +34,17 @@ class _SalaryScreenState extends State<SalaryScreen> {
   Future<void> _load() async {
     try {
       final l = await TeacherApi.salary();
-      if (mounted) setState(() => _ledger = l);
-    } catch (_) {
-      if (mounted) setState(() => _ledger = null);
+      if (mounted) {
+        setState(() {
+          _ledger = l;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() =>
+            _error = e is ApiException ? e.message : "Maosh ma'lumotini yuklab bo'lmadi");
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -64,13 +78,27 @@ class _SalaryScreenState extends State<SalaryScreen> {
     Widget body;
     if (_loading) {
       body = const Center(child: Loader());
+    } else if (_error != null && ledger == null) {
+      // Xato — bo'sh holat EMAS: sabab ko'rsatiladi va qayta urinish taklif qilinadi.
+      body = _refreshable([
+        const SizedBox(height: 24),
+        EmptyState(icon: Icons.error_outline_rounded, text: _error!),
+        Center(
+          child: SizedBox(
+            width: 180,
+            child: SButton('Qayta urinish',
+                icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: _load),
+          ),
+        ),
+      ]);
     } else if (ledger == null || ledger.months.isEmpty) {
-      body = const Center(
-        child: EmptyState(
+      body = _refreshable(const [
+        SizedBox(height: 24),
+        EmptyState(
           icon: Icons.account_balance_wallet_outlined,
           text: "Maosh ma'lumoti yo'q — hozircha hisoblangan oylik mavjud emas.",
         ),
-      );
+      ]);
     } else {
       final cur = _findMonth(ledger.months, curKey);
       final expected = cur?.expected ?? ledger.totalExpected;
@@ -81,8 +109,12 @@ class _SalaryScreenState extends State<SalaryScreen> {
           : "Qat'iy oylik";
       final months = ledger.months.reversed.toList();
 
-      body = ListView(
+      body = RefreshIndicator(
+        color: c.accent,
+        onRefresh: _load,
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+        physics: const AlwaysScrollableScrollPhysics(),
         children: [
           SCard(
             child: Column(
@@ -184,10 +216,26 @@ class _SalaryScreenState extends State<SalaryScreen> {
             ),
           ),
         ],
+        ),
       );
     }
 
     return SubScaffold(title: 'Maosh', child: body);
+  }
+
+  /// Bo'sh/xato holatlar ham pastga tortib yangilanadi (`RefreshIndicator`
+  /// scroll qilinadigan bola talab qiladi).
+  Widget _refreshable(List<Widget> children) {
+    final c = AppTheme.of(context);
+    return RefreshIndicator(
+      color: c.accent,
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: children,
+      ),
+    );
   }
 }
 

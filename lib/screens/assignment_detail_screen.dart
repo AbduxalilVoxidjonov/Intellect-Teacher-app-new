@@ -6,6 +6,18 @@ import '../utils/format.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 
+/// Ball maydonidagi matnni songa aylantiradi.
+///
+/// TUZATILDI (P1-11): "8,5" (o'zbek/rus klaviaturasi taklif qiladigan vergulli
+/// kasr) `double.tryParse` da `null` bo'lardi va ball JIMGINA saqlanmasdi —
+/// oyna esa saqlangandek yopilardi. Yaroqsiz kirish uchun `null` qaytadi.
+double? parseScoreInput(String raw) {
+  final t = raw.trim().replaceAll(',', '.');
+  if (t.isEmpty) return null;
+  final v = double.tryParse(t);
+  return (v == null || !v.isFinite) ? null : v;
+}
+
 const Map<String, String> _formatLabel = {
   'written': 'Yozma',
   'file': 'Fayl',
@@ -109,7 +121,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         else
           ...done.map((row) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _StudentRow(row: row, onTap: () => _openMark(row)),
+                child: _StudentRow(row: row, maxScore: r.maxScore, onTap: () => _openMark(row)),
               )),
         const SizedBox(height: 18),
         SectionTitle("Bajarmadi (${pending.length})"),
@@ -118,7 +130,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         else
           ...pending.map((row) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _StudentRow(row: row, onTap: () => _openMark(row)),
+                child: _StudentRow(row: row, maxScore: r.maxScore, onTap: () => _openMark(row)),
               )),
       ],
     );
@@ -147,8 +159,9 @@ class _StatBadge extends StatelessWidget {
 
 class _StudentRow extends StatelessWidget {
   final SubmissionRow row;
+  final double maxScore;
   final VoidCallback onTap;
-  const _StudentRow({required this.row, required this.onTap});
+  const _StudentRow({required this.row, required this.maxScore, required this.onTap});
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
@@ -174,7 +187,10 @@ class _StudentRow extends StatelessWidget {
             ),
           ),
           if (row.completed)
-            GradeBox(row.score)
+            // TUZATILDI (BUG-U2): bu 0–100 ball, jurnalning 1–5 bahosi EMAS.
+            // `GradeBox` da 5 ham, 100 ham bir xil to'q yashil ko'rinar va
+            // "87.5" 30×30 katakda jimgina kesilardi.
+            ScoreBadge(score: row.score, maxScore: maxScore)
           else
             Icon(Icons.chevron_right_rounded, color: c.faint),
         ],
@@ -212,6 +228,31 @@ class _SubmissionSheetState extends State<_SubmissionSheet> {
   }
 
   Future<void> _save() async {
+    // TUZATILDI (P1-11):
+    //  1) "8,5" `double.tryParse` da `null` bo'lib, ball JIMGINA saqlanmasdi;
+    //  2) `maxScore` chegarasi tekshirilmasdi;
+    //  3) manfiy ball qabul qilinardi;
+    //  4) "Bajarmadi" tanlansa ham ball yuborilardi (maydon faqat `enabled: false`).
+    final raw = _score.text.trim();
+    double? score;
+    if (_completed && raw.isNotEmpty) {
+      score = parseScoreInput(raw);
+      if (score == null) {
+        setState(() => _error = "Ball noto'g'ri kiritilgan. Masalan: 8 yoki 8,5");
+        return;
+      }
+      if (score < 0) {
+        setState(() => _error = "Ball manfiy bo'lishi mumkin emas");
+        return;
+      }
+      if (score > widget.maxScore) {
+        final maxTxt = widget.maxScore % 1 == 0
+            ? '${widget.maxScore.toInt()}'
+            : '${widget.maxScore}';
+        setState(() => _error = "Ball maksimaldan ($maxTxt) katta bo'lmasligi kerak");
+        return;
+      }
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -221,7 +262,8 @@ class _SubmissionSheetState extends State<_SubmissionSheet> {
         widget.assignmentId,
         widget.row.studentId,
         _completed,
-        score: _score.text.trim().isEmpty ? null : double.tryParse(_score.text.trim()),
+        // "Bajarmadi" holatida ball umuman yuborilmaydi.
+        score: score,
       );
       if (!mounted) return;
       Navigator.pop(context, true);

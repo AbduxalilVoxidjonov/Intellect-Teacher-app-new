@@ -46,6 +46,50 @@ class AppColors {
     required this.isDark,
   });
 
+  /// Palitralar QIYMAT bo'yicha solishtiriladi — `AppTheme.updateShouldNotify`
+  /// shu orqali ranglar almashganini biladi (BUG-U4).
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is AppColors &&
+        other.accent == accent &&
+        other.accentD == accentD &&
+        other.accentSoft == accentSoft &&
+        other.bg == bg &&
+        other.surface == surface &&
+        other.surface2 == surface2 &&
+        other.surface3 == surface3 &&
+        other.text == text &&
+        other.muted == muted &&
+        other.faint == faint &&
+        other.border == border &&
+        other.borderStrong == borderStrong &&
+        other.green == green &&
+        other.greenSoft == greenSoft &&
+        other.red == red &&
+        other.redSoft == redSoft &&
+        other.amber == amber &&
+        other.amberSoft == amberSoft &&
+        other.isDark == isDark &&
+        _sameShadow(other.shadow, shadow);
+  }
+
+  static bool _sameShadow(List<BoxShadow> a, List<BoxShadow> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        accent, accentD, accentSoft, bg, surface, surface2, surface3,
+        text, muted, faint, border, borderStrong, green, greenSoft,
+        red, redSoft, amber, amberSoft, isDark,
+      );
+
   static const light = AppColors(
     accent: Color(0xFF1F1F94), // navy-blue (brend)
     accentD: Color(0xFF020066), // brend navy (logo foni)
@@ -103,8 +147,11 @@ class AppTheme extends InheritedWidget {
     return w?.colors ?? AppColors.light;
   }
 
+  /// TUZATILDI (BUG-U4): avval faqat `isDark` solishtirilardi — bir xil rejimda
+  /// palitra almashsa (brend rangi, A/B palitra) dependentlar ESKI ranglar bilan
+  /// qolib ketardi. Endi butun palitra qiymat bo'yicha solishtiriladi.
   @override
-  bool updateShouldNotify(AppTheme oldWidget) => oldWidget.colors.isDark != colors.isDark;
+  bool updateShouldNotify(AppTheme oldWidget) => oldWidget.colors != colors;
 }
 
 /// Web bilan mos radiuslar/o'lchamlar.

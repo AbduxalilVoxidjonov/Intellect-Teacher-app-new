@@ -6,6 +6,19 @@ import '../../utils/format.dart';
 import '../../widgets/ui.dart';
 import '../assignment_detail_screen.dart';
 
+/// Maksimal ball maydonini tekshiradi: vergulli kasr ham qabul qilinadi,
+/// qiymat musbat va chekli bo'lishi shart.
+///
+/// TUZATILDI (P1-12): avval `double.tryParse(...) ?? 100` edi — "abc" va "7,5"
+/// JIMGINA 100 ga aylanar, `0` va `-10` esa qabul qilinardi.
+double? parseMaxScoreInput(String raw) {
+  final t = raw.trim().replaceAll(',', '.');
+  if (t.isEmpty) return null;
+  final v = double.tryParse(t);
+  if (v == null || !v.isFinite || v <= 0) return null;
+  return v;
+}
+
 /// Format bo'yicha ikona + rang (web `AssignmentsPage`dagi formatMeta bilan bir xil g'oya).
 const Map<String, String> _formatLabel = {
   'written': 'Yozma',
@@ -354,6 +367,13 @@ class _AssignmentFormSheetState extends State<_AssignmentFormSheet> {
       setState(() => _error = "Guruh va kurs tanlanmagan");
       return;
     }
+    // TUZATILDI (P1-12): `double.tryParse(...) ?? 100` "abc" va "7,5" ni
+    // JIMGINA 100 ga aylantirar, `0`/`-10` ni esa qabul qilardi.
+    final maxScore = parseMaxScoreInput(_maxScore.text);
+    if (maxScore == null) {
+      setState(() => _error = "Maksimal ball musbat son bo'lishi kerak (masalan 100 yoki 7,5)");
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -371,7 +391,7 @@ class _AssignmentFormSheetState extends State<_AssignmentFormSheet> {
         dueDate: due,
         lateAccept: false,
         latePenaltyPct: 0,
-        maxScore: double.tryParse(_maxScore.text.trim()) ?? 100,
+        maxScore: maxScore,
         autoGrade: false,
         materials: const [],
         questions: const [],

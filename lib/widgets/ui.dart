@@ -148,10 +148,15 @@ class ProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
+    // TUZATILDI (BUG-U1): `num.clamp` total-order semantikasida NaN HAMMADAN
+    // katta hisoblanadi, shuning uchun `double.nan.clamp(0,1) == 1.0` — progress
+    // "100% bajarildi" bo'lib ko'rinardi. Yaroqsiz qiymat endi ANIQLANMAGAN
+    // (indeterminate) holat sifatida chiziladi.
+    final v = value.isFinite ? value.clamp(0.0, 1.0) : null;
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: LinearProgressIndicator(
-        value: value.clamp(0, 1),
+        value: v,
         minHeight: height,
         backgroundColor: c.surface3,
         valueColor: AlwaysStoppedAnimation(color ?? c.accent),
@@ -240,6 +245,15 @@ class Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    final letters = Text(
+      initials(name),
+      style: TextStyle(color: Colors.white, fontSize: size * 0.38, fontWeight: FontWeight.w700),
+    );
+    // TUZATILDI (BUG-U3): avval `DecorationImage` ishlatilardi — unda xato
+    // qorovuli yo'q, shuning uchun `imageUrl` berilishi bilan bosh harflar
+    // butunlay yo'qolar, rasm yuklanmasa (404/oflayn) BO'SH doira qolardi.
+    // Endi bosh harflar HAR DOIM ostida turadi va rasm ustiga chiziladi.
     return Container(
       width: size,
       height: size,
@@ -251,14 +265,45 @@ class Avatar extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        image: (imageUrl != null && imageUrl!.isNotEmpty)
-            ? DecorationImage(image: NetworkImage(imageUrl!), fit: BoxFit.cover)
-            : null,
       ),
-      child: (imageUrl == null || imageUrl!.isEmpty)
-          ? Text(initials(name),
-              style: TextStyle(color: Colors.white, fontSize: size * 0.38, fontWeight: FontWeight.w700))
-          : null,
+      child: hasImage
+          ? ClipOval(
+              child: Image.network(
+                imageUrl!,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                // Yuklanayotganda ham, xato bo'lganda ham bosh harflar ko'rinadi.
+                loadingBuilder: (ctx, child, ev) =>
+                    ev == null ? child : Center(child: letters),
+                errorBuilder: (ctx, _, __) => Center(child: letters),
+              ),
+            )
+          : letters,
+    );
+  }
+}
+
+/// Balandligi CHEKLANGAN ota-widget ichida toshib ketmasligi uchun o'ram
+/// (TUZATILDI — NEW-1). Balandlik cheklanmagan bo'lsa (ListView bolasi kabi)
+/// hech narsa o'zgarmaydi: u yerda `SingleChildScrollView` "unbounded height"
+/// xatosini berardi. Cheklangan bo'lsa — kontent markazda turadi, sig'masa
+/// scroll qilinadi (sariq-qora "overflowed" chizig'i o'rniga).
+class _FitOrScroll extends StatelessWidget {
+  final Widget child;
+  const _FitOrScroll({required this.child});
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, cons) {
+        if (!cons.hasBoundedHeight) return child;
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: cons.maxHeight),
+            child: Center(child: child),
+          ),
+        );
+      },
     );
   }
 }
@@ -271,20 +316,22 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(color: c.surface3, borderRadius: BorderRadius.circular(20)),
-            child: Icon(icon, color: c.faint, size: 30),
-          ),
-          const SizedBox(height: 12),
-          Text(text, textAlign: TextAlign.center, style: TextStyle(color: c.muted, fontSize: 14)),
-        ],
+    return _FitOrScroll(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(color: c.surface3, borderRadius: BorderRadius.circular(20)),
+              child: Icon(icon, color: c.faint, size: 30),
+            ),
+            const SizedBox(height: 12),
+            Text(text, textAlign: TextAlign.center, style: TextStyle(color: c.muted, fontSize: 14)),
+          ],
+        ),
       ),
     );
   }
@@ -297,20 +344,22 @@ class Loader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 34,
-            height: 34,
-            child: CircularProgressIndicator(strokeWidth: 3, color: c.accent),
-          ),
-          if (label != null) ...[
-            const SizedBox(height: 12),
-            Text(label!, style: TextStyle(color: c.muted, fontSize: 13)),
+    return _FitOrScroll(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 34,
+              height: 34,
+              child: CircularProgressIndicator(strokeWidth: 3, color: c.accent),
+            ),
+            if (label != null) ...[
+              const SizedBox(height: 12),
+              Text(label!, style: TextStyle(color: c.muted, fontSize: 13)),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -391,12 +440,23 @@ class SButton extends StatelessWidget {
                 ? SizedBox(
                     width: 22, height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2.4, color: fg))
+                // TUZATILDI (BUG-U5): matn `Flexible`ga o'ralmagan va overflow
+                // siyosati yo'q edi — tor tugmada (yonma-yon ikki tugma, sheet,
+                // katta shrift) "RenderFlex overflowed ... on the right" chiqardi.
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (icon != null) ...[Icon(icon, size: 19, color: fg), const SizedBox(width: 8)],
-                      Text(label,
-                          style: TextStyle(color: fg, fontSize: large ? 17 : 16, fontWeight: FontWeight.w700)),
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: fg, fontSize: large ? 17 : 16, fontWeight: FontWeight.w700),
+                        ),
+                      ),
                     ],
                   ),
           ),
@@ -406,7 +466,64 @@ class SButton extends StatelessWidget {
   }
 }
 
-/// Baho rangli qutichasi (jadval/katak uchun).
+/// Topshiriq BALLI ("8.5/10") — jurnalning 1–5 shkalasidan FARQLI.
+///
+/// BUG-U2: ilgari topshiriq ballari `GradeBox`ga berilardi, u esa 1–5 uchun
+/// yozilgan: `_gradeStep` 5 dan katta HAR QANDAY qiymatni bir xil to'q yashil
+/// qilar (5 ham, 100 ham) va 30×30 katakka sig'magan "87.5" jimgina kesilardi.
+/// Bu widget ballni maksimalga NISBATAN ko'rsatadi: matn "ball/maks", rang esa
+/// foizga qarab (yashil → ko'k → sariq → qizil).
+class ScoreBadge extends StatelessWidget {
+  final num? score;
+  final num maxScore;
+  const ScoreBadge({super.key, required this.score, this.maxScore = 100});
+
+  static String _num(num v) => v % 1 == 0 ? '${v.toInt()}' : '$v';
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    final s = score?.toDouble();
+    final max = maxScore.toDouble();
+    if (s == null || !s.isFinite) {
+      return Text('—', style: TextStyle(color: c.faint, fontWeight: FontWeight.w700));
+    }
+    final pct = (max.isFinite && max > 0) ? (s / max).clamp(0.0, 1.0) : null;
+    Color bg;
+    Color fg;
+    if (pct == null) {
+      bg = c.surface3;
+      fg = c.text;
+    } else if (pct >= 0.85) {
+      bg = c.greenSoft;
+      fg = c.green;
+    } else if (pct >= 0.6) {
+      bg = c.accentSoft;
+      fg = c.accent;
+    } else if (pct >= 0.4) {
+      bg = c.amberSoft;
+      fg = c.amber;
+    } else {
+      bg = c.redSoft;
+      fg = c.red;
+    }
+    final text = (max.isFinite && max > 0) ? '${_num(s)}/${_num(max)}' : _num(s);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+      child: Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 13),
+      ),
+    );
+  }
+}
+
+/// Baho rangli qutichasi (jadval/katak uchun) — FAQAT jurnalning 1–5 shkalasi.
+/// Topshiriq ballari (0–100) uchun `ScoreBadge` ishlatilsin.
 class GradeBox extends StatelessWidget {
   final num? grade;
   final double size;

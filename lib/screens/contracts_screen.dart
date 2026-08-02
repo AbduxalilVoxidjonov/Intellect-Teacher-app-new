@@ -9,6 +9,23 @@ import '../utils/format.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 
+/// Nisbiy fayl manzilini baza URL ustiga TO'G'RI ulaydi.
+///
+/// TUZATILDI (P2): avval satr qo'shish ishlatilardi — server "uploads/x.pdf"
+/// (boshida "/" siz) qaytarsa "https://hostuploads/x.pdf" hosil bo'lardi.
+Uri? resolveFileUrl(String url) {
+  final t = url.trim();
+  if (t.isEmpty) return null;
+  if (t.startsWith('http')) return Uri.tryParse(t);
+  final base = Uri.tryParse(kFileBaseUrl);
+  if (base == null) return null;
+  try {
+    return base.resolve(t);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Shartnoma — o'qituvchi bilan tuzilgan shartnomalarning elektron (PDF) nusxalari.
 /// Backend: `GET /teacher/contracts` — faqat superadmin PDF yuklagan shartnomalar keladi,
 /// shuning uchun har bir kartochka bosiladi va PDF tashqi ilovada ochiladi.
@@ -46,15 +63,24 @@ class _ContractsScreenState extends State<ContractsScreen> {
 
   /// Faylni tashqi ilovada ochish (guruh testlaridagi bilan bir xil uslub).
   Future<void> _openFile(String url) async {
-    final full = url.startsWith('http') ? url : '$kFileBaseUrl$url';
-    try {
-      await launchUrl(Uri.parse(full), mode: LaunchMode.externalApplication);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Faylni ochib bo'lmadi")));
-      }
+    final uri = resolveFileUrl(url);
+    if (uri == null) {
+      _toast("Fayl manzili noto'g'ri");
+      return;
     }
+    try {
+      // TUZATILDI (P2): `launchUrl` natijasi e'tiborsiz qoldirilardi — hech
+      // qanday ilova topilmasa foydalanuvchi uchun JIMGINA hech nima bo'lmasdi.
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) _toast("Faylni ochib bo'lmadi");
+    } catch (_) {
+      _toast("Faylni ochib bo'lmadi");
+    }
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override

@@ -40,16 +40,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _error = false;
     });
     try {
-      final profile = await TeacherApi.profile();
-      final classes = await TeacherApi.myClasses();
-      final meta = await TeacherApi.meta();
-      final notifs = await TeacherApi.notifications();
-      final salary = await TeacherApi.salary().catchError((_) => null);
-      final rating = await TeacherApi.rating().catchError((_) => null);
-      TeacherSchoolInfo? school;
-      try {
-        school = await TeacherApi.school();
-      } catch (_) {}
+      // TUZATILDI (P2): 7 endpoint KETMA-KET yuklanardi (~2 s bo'sh spinner).
+      // Endi barchasi parallel (`assignments_screen.dart:54` dagi namuna).
+      // Majburiylari xato bersa butun yuklash xato hisoblanadi, ixtiyoriylari
+      // (maosh/reyting/markaz) `null` bo'lib o'tadi — avvalgi xatti-harakat.
+      final profileF = TeacherApi.profile();
+      final classesF = TeacherApi.myClasses();
+      final metaF = TeacherApi.meta();
+      final notifsF = TeacherApi.notifications();
+      final salaryF = _optional(TeacherApi.salary());
+      final ratingF = _optional(TeacherApi.rating());
+      final schoolF = _optional(TeacherApi.school());
+      await Future.wait<void>([
+        profileF, classesF, metaF, notifsF, salaryF, ratingF, schoolF,
+      ]);
+      final profile = await profileF;
+      final classes = await classesF;
+      final meta = await metaF;
+      final notifs = await notifsF;
+      final salary = await salaryF;
+      final rating = await ratingF;
+      final school = await schoolF;
       if (!mounted) return;
       setState(() {
         _profile = profile;
@@ -70,25 +81,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  /// Ixtiyoriy endpoint — xato bo'lsa `null` (yuklash buzilmaydi).
+  Future<T?> _optional<T>(Future<T> f) async {
+    try {
+      return await f;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _openNotifications() async {
-    if (_notifs != null && _notifs!.unread > 0) {
-      TeacherApi.markNotificationsRead().catchError((_) {});
-      setState(() {
-        _notifs = NotificationsResponse(
-          unread: 0,
-          items: _notifs!.items
-              .map((i) => AppNotification(
-                    id: i.id,
-                    title: i.title,
-                    body: i.body,
-                    type: i.type,
-                    createdAt: i.createdAt,
-                    read: true,
-                    confirmed: i.confirmed,
-                  ))
-              .toList(),
-        );
-      });
+    final n = _notifs;
+    if (n != null && n.unread > 0) {
+      // TUZATILDI (P2): avval server xatosidan QAT'I NAZAR "o'qildi" qilinardi —
+      // rozetka qayta ochilganda o'qilmagan bildirishnomalar "yo'q" bo'lib
+      // ko'rinar, lekin serverda o'qilmagan bo'lib qolardi.
+      try {
+        await TeacherApi.markNotificationsRead();
+        if (!mounted) return;
+        setState(() {
+          _notifs = NotificationsResponse(
+            unread: 0,
+            items: n.items
+                .map((i) => AppNotification(
+                      id: i.id,
+                      title: i.title,
+                      body: i.body,
+                      type: i.type,
+                      createdAt: i.createdAt,
+                      read: true,
+                      confirmed: i.confirmed,
+                    ))
+                .toList(),
+          );
+        });
+      } catch (_) {
+        // Xato — holat o'zgarmaydi, hisoblagich o'qilmagan bo'lib qoladi.
+      }
     }
     if (!mounted) return;
     await showModalBottomSheet(
@@ -110,7 +139,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? '${parts[0]} ${parts[1]}'
         : (parts.isNotEmpty ? parts.first : 'ustoz');
     final activeStudents = _rating?.studentsCount ?? 0;
-    final salaryExpected = _currentSalaryExpected();
+    final salaryTile = _salaryTile();
 
     return Column(
       children: [
@@ -149,7 +178,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 const SizedBox(width: 10),
                                 _statCard(c, Icons.account_balance_wallet_rounded, const Color(0xFF0284C7),
                                     const Color(0xFFE0F2FE),
-                                    salaryExpected == null ? '—' : fmtMoney(salaryExpected), 'Maosh'),
+                                    salaryTile.value == null ? '—' : fmtMoney(salaryTile.value!),
+                                    salaryTile.label),
                               ],
                             ),
                           ),
@@ -293,16 +323,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Joriy oyning hisoblangan maoshi (topilmasa jami — bo'lmasa null).
-  double? _currentSalaryExpected() {
+  /// Maosh plitasi uchun qiymat + YORLIQ.
+  ///
+  /// TUZATILDI (P1-18): joriy oy ledger'da bo'lmasa avval "Maosh" yorlig'i
+  /// ostida BUTUN DAVR yig'indisi ko'rsatilardi (24 mln vs 4 mln). Endi bunday
+  /// holatda yorliq "Jami" bo'ladi — `salary_screen.dart` dagi qoida bilan bir xil.
+  ({double? value, String label}) _salaryTile() {
     final l = _salary;
-    if (l == null || l.months.isEmpty) return null;
+    if (l == null || l.months.isEmpty) return (value: null, label: 'Maosh');
     final now = DateTime.now();
     final key = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     for (final m in l.months) {
-      if (m.month == key) return m.expected;
+      if (m.month == key) return (value: m.expected, label: 'Maosh');
     }
-    return l.totalExpected;
+    return (value: l.totalExpected, label: 'Jami');
   }
 
   /// Markaz Telegram kanali havolasi (bo'lmasa null).
@@ -317,19 +351,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _openTelegram() async {
     final url = _telegramUrl();
     if (url == null) return;
-    final uri = Uri.parse(url);
+    // TUZATILDI (P2): `Uri.parse` `try`dan TASHQARIDA edi — admin kiritgan buzuq
+    // havola `FormatException` bilan `await`siz callback ichidan otilib chiqardi.
     try {
+      final uri = Uri.parse(url);
       // Avval Telegram ilovasida/tashqi ilovada ochishga urinamiz,
       // bo'lmasa brauzerda (platformDefault) ochamiz.
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!ok && mounted) {
-        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      var ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        ok = await launchUrl(uri, mode: LaunchMode.platformDefault);
       }
+      if (!ok) _toast("Havolani ochib bo'lmadi");
     } catch (_) {
-      try {
-        await launchUrl(uri, mode: LaunchMode.platformDefault);
-      } catch (_) {}
+      _toast("Havolani ochib bo'lmadi");
     }
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Widget _telegramCard(AppColors c) {
@@ -436,7 +476,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 String _groupInitials(String name) {
   final cleaned = name.replaceAll(RegExp(r'\s+'), '');
   if (cleaned.isEmpty) return '?';
-  return cleaned.substring(0, cleaned.length < 3 ? cleaned.length : 3).toUpperCase();
+  // TUZATILDI (NIT): `substring(0, 3)` UTF-16 kod BIRLIGI bo'yicha kesardi va
+  // emoji bilan boshlangan nomda surrogat juftlikni buzardi ("tofu").
+  final runes = cleaned.runes.toList();
+  final take = runes.length < 3 ? runes.length : 3;
+  return String.fromCharCodes(runes.take(take)).toUpperCase();
 }
 
 /// Bildirishnomalar pastki paneli (bottom sheet) — o'z holatini o'zi boshqaradi.
@@ -452,9 +496,17 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
   late List<AppNotification> _items = List.of(widget.items);
 
   Future<void> _confirm(String id) async {
+    // TUZATILDI (P2): avval server xatosida ham "Tasdiqlandi" ko'rinardi —
+    // o'qituvchi tasdiqladim deb o'ylardi, admin esa tasdiqni ko'rmasdi.
     try {
       await TeacherApi.confirmNotification(id);
-    } catch (_) {}
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Tasdiqlab bo'lmadi. Qayta urinib ko'ring.")),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _items = _items

@@ -37,7 +37,20 @@ class _Ranked {
 class _RatingScreenState extends State<RatingScreen> with WidgetsBindingObserver {
   TeacherRating? _rating;
   bool _loading = true;
+
+  /// So'rov ketmoqdami (P2): ilgari `_load` `_loading`ni umuman `true` qilmasdi,
+  /// shuning uchun yangilash tugmasidagi qorovul HECH QACHON ishlamas va tez
+  /// bosilganda bir nechta so'rov parallel ketardi. To'liq ekran spinneri esa
+  /// faqat BIRINCHI yuklashda ko'rsatiladi (`_loading`), aks holda pull-to-refresh
+  /// tayyor ro'yxatni spinnerga almashtirib yuborardi.
+  bool _busy = false;
   String? _error;
+
+  /// `_load` da bir marta hisoblangan (memoizatsiya qilingan) ro'yxatlar —
+  /// ilgari `_sorted()`/`_allGroups()` HAR KADRDA `build()` ichida butun
+  /// ro'yxatni qayta saralardi (P2).
+  List<TeacherRatingRow> _allRows = const [];
+  List<String> _groups = const [];
 
   /// Tanlangan guruh (null = barcha guruhlar — web'dagi ko'rinish).
   String? _group;
@@ -100,17 +113,30 @@ class _RatingScreenState extends State<RatingScreen> with WidgetsBindingObserver
   }
 
   Future<void> _load() async {
-    if (mounted) setState(() => _error = null);
+    // P2: parallel so'rovlar ketmasin.
+    if (_busy) return;
+    if (mounted) {
+      setState(() {
+        _busy = true;
+        _error = null;
+      });
+    } else {
+      _busy = true;
+    }
     try {
       final r = await TeacherApi.rating();
       if (!mounted) return;
+      final rows = _sorted(r?.rows ?? const <TeacherRatingRow>[]);
+      final groups = _allGroups(rows);
       setState(() {
         _rating = r;
+        _allRows = rows;
+        _groups = groups;
         _loadedAt = DateTime.now();
         if (r == null) _error = "Reyting ma'lumoti topilmadi";
         // Tanlangan guruh endi mavjud bo'lmasa — "Barcha guruhlar"ga qaytamiz
         // (aks holda bo'sh ro'yxat ko'rinib qolardi).
-        if (_group != null && !_allGroups(r?.rows ?? const []).contains(_group)) {
+        if (_group != null && !groups.contains(_group)) {
           _group = null;
         }
       });
@@ -121,7 +147,10 @@ class _RatingScreenState extends State<RatingScreen> with WidgetsBindingObserver
     } catch (_) {
       if (mounted) setState(() => _error = "Reytingni yuklab bo'lmadi");
     } finally {
-      if (mounted) setState(() => _loading = false);
+      _busy = false;
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -135,8 +164,9 @@ class _RatingScreenState extends State<RatingScreen> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
     final rating = _rating;
-    final allRows = _sorted(rating?.rows ?? const <TeacherRatingRow>[]);
-    final groups = _allGroups(allRows);
+    // Memoizatsiya qilingan (saralash `_load` da bir marta bajariladi).
+    final allRows = _allRows;
+    final groups = _groups;
     // Tanlangan guruh bo'yicha filtr (tartib ball bo'yicha saqlanadi).
     final rows =
         _group == null ? allRows : allRows.where((r) => _inGroup(r, _group!)).toList();
@@ -292,7 +322,8 @@ class _RatingScreenState extends State<RatingScreen> with WidgetsBindingObserver
       title: "O'quvchilar reytingi",
       showBack: widget.showBack,
       actions: [
-        _RefreshBtn(onTap: _loading ? null : _load),
+        // Qorovul endi haqiqatan ishlaydi: so'rov ketayotganda tugma o'chiq.
+        _RefreshBtn(onTap: (_loading || _busy) ? null : _load),
       ],
       child: body,
     );
@@ -419,14 +450,20 @@ class _StatBox extends StatelessWidget {
 }
 
 /// FISH → bosh harflar (avatar uchun).
+///
+/// TUZATILDI (NIT): `substring(0, 1)` / `substring(0, 2)` UTF-16 kod BIRLIGI
+/// bo'yicha kesardi — emoji bilan boshlangan ism surrogat juftlikni buzardi.
 String _initialsOf(String fullName) {
   final parts = fullName.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
-  String f(String s) => s.isEmpty ? '' : s.substring(0, 1).toUpperCase();
-  if (parts.isEmpty) return '?';
-  if (parts.length == 1) {
-    return parts[0].length >= 2 ? parts[0].substring(0, 2).toUpperCase() : f(parts[0]);
+  String take(String s, int n) {
+    final runes = s.runes.toList();
+    if (runes.isEmpty) return '';
+    return String.fromCharCodes(runes.take(n)).toUpperCase();
   }
-  return f(parts[0]) + f(parts[1]);
+
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) return take(parts[0], 2);
+  return take(parts[0], 1) + take(parts[1], 1);
 }
 
 class _PodiumCard extends StatelessWidget {

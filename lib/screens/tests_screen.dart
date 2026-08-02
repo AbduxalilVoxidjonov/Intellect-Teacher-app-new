@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api/api_client.dart';
 import '../api/teacher_api.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -47,7 +48,7 @@ class _TestsScreenState extends State<TestsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = e is ApiException ? e.message : "Guruhlarni yuklab bo'lmadi";
         _loading = false;
       });
     }
@@ -56,13 +57,30 @@ class _TestsScreenState extends State<TestsScreen> {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
+    // P1-14: xato/bo'sh holatlar ham pastga tortib yangilanadi va «Qayta urinish»
+    // tugmasi bor — `IndexedStack` tabni tirik saqlagani uchun `initState` boshqa
+    // ishlamaydi va ilgari oflayn ishga tushish faqat ilovani qayta ochish bilan
+    // tuzatilardi (namuna: `rating_screen.dart:164-174`).
     final body = _loading
         ? const Center(child: Loader())
         : _error != null
-            ? EmptyState(icon: Icons.error_outline_rounded, text: _error!)
+            ? _refreshable(c, [
+                const SizedBox(height: 24),
+                EmptyState(icon: Icons.error_outline_rounded, text: _error!),
+                Center(
+                  child: SizedBox(
+                    width: 180,
+                    child: SButton('Qayta urinish',
+                        icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: _load),
+                  ),
+                ),
+              ])
             : _classes.isEmpty
-                ? const EmptyState(
-                    icon: Icons.groups_outlined, text: "Sizga biriktirilgan guruh yo'q.")
+                ? _refreshable(c, const [
+                    SizedBox(height: 24),
+                    EmptyState(
+                        icon: Icons.groups_outlined, text: "Sizga biriktirilgan guruh yo'q."),
+                  ])
                 : RefreshIndicator(
                     color: c.accent,
                     onRefresh: _load,
@@ -101,6 +119,16 @@ class _TestsScreenState extends State<TestsScreen> {
       ],
     );
   }
+
+  Widget _refreshable(AppColors c, List<Widget> children) => RefreshIndicator(
+        color: c.accent,
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: children,
+        ),
+      );
 
   Widget _groupCard(AppColors c, TeacherClass g) {
     return SCard(
