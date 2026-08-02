@@ -6,63 +6,124 @@
 
 String _s(dynamic v) => v == null ? '' : v.toString();
 
-String? _sn(dynamic v) => v == null ? null : v.toString();
+/// Bo'sh yoki faqat probeldan iborat satr = "ma'lumot yo'q" → `null`.
+/// Aks holda UI `dueDate != null` ni "sana bor" deb o'qiydi va bo'sh joy chizadi.
+String? _sn(dynamic v) {
+  if (v == null) return null;
+  final s = v.toString();
+  return s.trim().isEmpty ? null : s;
+}
+
+/// Faqat aniq vergulli kasr ("1,5", "-12,75") nuqtali shaklga o'giriladi.
+/// Minglik guruh HAR DOIM 3 xonali ("1,234") — shuning uchun 1..2 xonali
+/// naqsh bilan chalkashmaydi va u tegilmay qoladi (0.0 bo'lib qolaveradi).
+final RegExp _decimalCommaRe = RegExp(r'^-?\d+,\d{1,2}$');
+
+String _commaToDot(String s) {
+  final t = s.trim();
+  return _decimalCommaRe.hasMatch(t) ? t.replaceFirst(',', '.') : s;
+}
+
+/// `num`/`double` oqimidagi NaN va cheksizlik UI ga o'tsa `fmtMoney`/`gradeColor`
+/// `build()` ichida `UnsupportedError` beradi — shuning uchun manbada filtrlanadi.
+double? _finite(double? d) => (d != null && d.isFinite) ? d : null;
+
+/// `double` dan `int` ga xavfsiz o'tish. `9.2e18` kabi qiymat `.round()` da
+/// int64 chegarasiga "yopishib" qolardi va baho `9223372036854775807` bo'lardi —
+/// bu 0 dan ham yomonroq. 2^53 dan katta son aniq buzuq ma'lumot.
+int? _finiteInt(double? d) {
+  final v = _finite(d);
+  if (v == null || v.abs() > 9007199254740992.0) return null;
+  return v.round();
+}
 
 int _i(dynamic v) {
   if (v == null) return 0;
   if (v is int) return v;
-  if (v is num) return v.toInt();
-  return int.tryParse(v.toString()) ?? 0;
+  if (v is num) return v.isFinite ? v.toInt() : 0;
+  final s = v.toString();
+  // "4.0" kabi kasr shaklidagi butun son int.tryParse uchun yaroqsiz — baho
+  // yo'qolmasligi uchun double orqali zaxira yo'l bor.
+  return int.tryParse(s) ?? _finiteInt(double.tryParse(_commaToDot(s))) ?? 0;
 }
 
 int? _in(dynamic v) {
   if (v == null) return null;
   if (v is int) return v;
-  if (v is num) return v.toInt();
-  return int.tryParse(v.toString());
+  if (v is num) return v.isFinite ? v.toInt() : null;
+  final s = v.toString();
+  return int.tryParse(s) ?? _finiteInt(double.tryParse(_commaToDot(s)));
 }
 
 double _d(dynamic v) {
   if (v == null) return 0;
-  if (v is num) return v.toDouble();
-  return double.tryParse(v.toString()) ?? 0;
+  if (v is num) return v.isFinite ? v.toDouble() : 0;
+  return _finite(double.tryParse(_commaToDot(v.toString()))) ?? 0;
 }
 
 double? _dn(dynamic v) {
   if (v == null) return null;
-  if (v is num) return v.toDouble();
-  return double.tryParse(v.toString());
+  if (v is num) return v.isFinite ? v.toDouble() : null;
+  return _finite(double.tryParse(_commaToDot(v.toString())));
 }
 
 bool _b(dynamic v) {
   if (v is bool) return v;
   if (v is num) return v != 0;
-  if (v is String) return v.toLowerCase() == 'true';
+  if (v is String) {
+    final s = v.trim().toLowerCase();
+    return s == 'true' || s == '1' || s == 'yes' || s == 'y' || s == 'on';
+  }
   return false;
 }
 
-bool? _bn(dynamic v) => v == null ? null : _b(v);
+/// Bo'sh satr — "ma'lumot yo'q", "aniq false" emas.
+bool? _bn(dynamic v) {
+  if (v == null) return null;
+  if (v is String && v.trim().isEmpty) return null;
+  return _b(v);
+}
+
+/// Har doim `Map<String, dynamic>` qaytaradi: Map bo'lmasa — bo'sh map
+/// (barcha `fromJson` bo'sh map bilan ishlay oladi).
+///
+/// Kalit String bo'lmasa `toString()` bilan saqlanadi — `_intMap` va
+/// `teacher_api.dart::_asMap` bilan BIR XIL qoida. Avval bunday map butunlay
+/// tashlab yuborilardi, ya'ni bitta raqamli kalit qolgan hamma maydonni
+/// (masalan `group.id` ni) yo'q qilardi.
+Map<String, dynamic> _map(dynamic v) {
+  if (v is! Map) return const <String, dynamic>{};
+  final out = <String, dynamic>{};
+  v.forEach((k, val) => out[k.toString()] = val);
+  return out;
+}
+
+/// `a` to'ldirilgan ro'yxat bo'lsa o'sha, aks holda `b` (zaxira maydon).
+dynamic _orFallback(dynamic a, dynamic b) => (a is List && a.isNotEmpty) ? a : b;
 
 List<T> _list<T>(dynamic v, T Function(Map<String, dynamic>) fromJson) {
-  if (v == null) return <T>[];
-  return (v as List)
-      .map((e) => fromJson(Map<String, dynamic>.from(e as Map)))
-      .toList();
+  if (v is! List) return <T>[];
+  // Bitta buzuq element (null yoki skalyar) butun javobni yo'q qilmasligi kerak.
+  // `_map` ishlatiladi: `Map<String, dynamic>.from` String bo'lmagan kalitda
+  // yiqilardi, ya'ni bitta buzuq element hamon butun ro'yxatni yo'q qilardi.
+  return v.whereType<Map>().map((e) => fromJson(_map(e))).toList();
 }
 
 List<String> _strList(dynamic v) {
-  if (v == null) return <String>[];
-  return (v as List).map((e) => e.toString()).toList();
+  if (v is! List) return <String>[];
+  return v.where((e) => e != null).map((e) => e.toString()).toList();
 }
 
 List<int> _intList(dynamic v) {
-  if (v == null) return <int>[];
-  return (v as List).map((e) => _i(e)).toList();
+  if (v is! List) return <int>[];
+  return v.where((e) => e != null).map((e) => _i(e)).toList();
 }
 
 Map<String, int> _intMap(dynamic v) {
-  if (v == null) return <String, int>{};
-  return Map<String, dynamic>.from(v as Map).map((k, val) => MapEntry(k, _i(val)));
+  if (v is! Map) return <String, int>{};
+  // Kalit String bo'lmasa `toString()` bilan saqlanadi: raqamli kalit ({1: 5})
+  // odatda o'quvchi/mezon id si — uni tashlab yuborish ma'lumot yo'qotish bo'lardi.
+  return v.map((k, val) => MapEntry(_s(k), _i(val)));
 }
 
 
@@ -1039,7 +1100,9 @@ class GroupJournal {
   });
 
   factory GroupJournal.fromJson(Map<String, dynamic> j) => GroupJournal(
-        group: GroupJournalInfo.fromJson(Map<String, dynamic>.from(j['group'] as Map)),
+        // `group` kelmasa ham sahifa ochilishi kerak — `GroupJournalInfo` ning
+        // hamma maydoni `_s`/`_i`/`_d` orqali o'tadi, bo'sh map yetarli.
+        group: GroupJournalInfo.fromJson(_map(j['group'])),
         months: _strList(j['months']),
         month: _s(j['month']),
         columns: _list(j['columns'], JournalColumn.fromJson),
@@ -1281,7 +1344,8 @@ class GroupCurriculum {
         estFinishDate: _sn(j['estFinishDate']),
         // Backend maydon nomi — `modules` (web `GroupCurriculum.modules`). Avval faqat
         // `levels` o'qilardi va daraxt HAR DOIM bo'sh kelardi; `levels` zaxira sifatida qoldi.
-        levels: _list(j['modules'] ?? j['levels'], GroupCurriculumLevel.fromJson),
+        // `??` yetarli emas edi: `modules: []` null emas, shuning uchun zaxira ishlamasdi.
+        levels: _list(_orFallback(j['modules'], j['levels']), GroupCurriculumLevel.fromJson),
       );
 }
 
@@ -1473,21 +1537,38 @@ class OnlineTest {
 
   bool get isOnline => mode == 'online';
 
+  /// `mode` registr/probelga bog'liq bo'lmasligi kerak: backend "ONLINE" yuborsa
+  /// ham test onlayn bo'lib qolishi shart. Bo'sh qiymat → "offline".
+  static String _mode(dynamic v) {
+    final s = _s(v).trim().toLowerCase();
+    return s.isEmpty ? 'offline' : s;
+  }
+
+  /// 0/berilmagan → 4 (A–D standarti), qolgani 2..6 ga qisiladi:
+  /// `group_tests_panel.dart` dagi variantlar dropdowni faqat shu oraliqni biladi.
+  static int _options(dynamic v) {
+    final n = _i(v);
+    return n == 0 ? 4 : n.clamp(2, 6);
+  }
+
   factory OnlineTest.fromJson(Map<String, dynamic> j) => OnlineTest(
-        mode: _s(j['mode']).isEmpty ? 'offline' : _s(j['mode']),
+        mode: _mode(j['mode']),
         pdfUrl: _s(j['pdfUrl']),
         pdfName: _s(j['pdfName']),
         questionCount: _i(j['questionCount']),
-        optionCount: _i(j['optionCount']) == 0 ? 4 : _i(j['optionCount']),
+        optionCount: _options(j['optionCount']),
+        // `answerKey` uzunligi ATAYLAB `questionCount` ga moslashtirilmaydi —
+        // tahrirlash oynasi uni o'zi to'g'rilaydi va barcha o'quvchi joylari
+        // `answerKey.length` bo'yicha aylanadi (chegaradan chiqish yo'q).
         answerKey: _s(j['answerKey']),
         startAt: _s(j['startAt']),
         endAt: _s(j['endAt']),
       );
 
-  /// `null` bo'lgan/berilmagan `online` maydoni — oflayn test.
-  static OnlineTest parse(Object? v) => v is Map
-      ? OnlineTest.fromJson(Map<String, dynamic>.from(v))
-      : const OnlineTest();
+  /// `null` bo'lgan/berilmagan/buzuq `online` maydoni — oflayn test.
+  /// (String bo'lmagan kalitli Map ham butun testlar ekranini yiqitmasligi kerak.)
+  static OnlineTest parse(Object? v) =>
+      v is Map ? OnlineTest.fromJson(_map(v)) : const OnlineTest();
 
   Map<String, dynamic> toJson() => {
         'mode': mode,

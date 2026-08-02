@@ -15,6 +15,48 @@ class TeacherApi {
     }
   }
 
+  /* ---------- Javob tanasini xavfsiz o'qish ---------- */
+  //
+  // DIQQAT: 2xx bo'lgani javob tanasi JSON degani emas. dio bo'sh tanani
+  // content-type'ga qarab `''` (ASP.NET `NoContent()` — content-type yo'q)
+  // yoki `null` (content-type JSON) qilib beradi. Xom `as List`/`as Map`
+  // cast'lari HAR IKKALA holatda ham `TypeError` berardi — bu `Error`, ya'ni
+  // ekranlardagi `on ApiException` uni tutmaydi va o'qituvchi
+  // "type 'String' is not a subtype of type 'Map'" matnini ko'rardi.
+
+  /// Ro'yxat bo'lmasa — bo'sh ro'yxat.
+  static List<dynamic> _asList(dynamic d) => d is List ? d : const <dynamic>[];
+
+  /// Map bo'lmasa — bo'sh map (barcha `fromJson` bo'sh map bilan ishlay oladi,
+  /// chunki hamma maydon `_s`/`_i`/`_d` yordamchilaridan o'tadi).
+  static Map<String, dynamic> _asMap(dynamic d) {
+    if (d is! Map) return const <String, dynamic>{};
+    final out = <String, dynamic>{};
+    d.forEach((k, v) => out[k.toString()] = v);
+    return out;
+  }
+
+  /// Tana bo'sh bo'lsa `null` — chaqiruvchi "ma'lumot yo'q" holatini ko'rsatadi.
+  static Map<String, dynamic>? _asMapOrNull(dynamic d) =>
+      d is Map ? _asMap(d) : null;
+
+  /* ---------- Fayl yuklash chegarasi ---------- */
+
+  /// Backend `UploadGuard` chegarasi. Mijozda tekshirilmasa, foydalanuvchi
+  /// katta faylni to'liq yuklab bo'lgach 413 oladi va (413 uchun matn
+  /// bo'lmagani sababli) "Xatolik yuz berdi" ko'radi. Android'da native
+  /// tanlagichda tekshiruv bor, iOS/galereya yo'lida esa umuman yo'q edi.
+  static const int _kMaxUploadBytes = 20 * 1024 * 1024;
+
+  static void _checkSize(List<int> bytes) {
+    if (bytes.isEmpty) {
+      throw ApiException(null, "Fayl bo'sh");
+    }
+    if (bytes.length > _kMaxUploadBytes) {
+      throw ApiException(413, "Fayl 20 MB dan katta bo'lmasligi kerak");
+    }
+  }
+
   /// `null` qiymatlarni olib tashlaydi (dio null query paramni ham yuborib
   /// yuborishi mumkin — axios kabi avtomatik tashlab yubormaydi).
   static Map<String, dynamic> _qp(Map<String, dynamic> m) {
@@ -30,15 +72,16 @@ class TeacherApi {
   static Future<TeacherProfile?> profile() async {
     final res = await ApiClient.dio.get('/teacher/me');
     _check(res);
-    final data = res.data;
-    return data == null ? null : TeacherProfile.fromJson(data as Map<String, dynamic>);
+    // `data == null` qorovuli yetarli emas edi: HAQIQIY 204 da dio `''` beradi.
+    final data = _asMapOrNull(res.data);
+    return data == null ? null : TeacherProfile.fromJson(data);
   }
 
   static Future<List<TeacherClass>> myClasses() async {
     final res = await ApiClient.dio.get('/teacher/classes');
     _check(res);
-    return (res.data as List)
-        .map((e) => TeacherClass.fromJson(e as Map<String, dynamic>))
+    return _asList(res.data)
+        .map((e) => TeacherClass.fromJson(_asMap(e)))
         .toList();
   }
 
@@ -47,8 +90,8 @@ class TeacherApi {
   static Future<List<EvaluationType>> evalTypes() async {
     final res = await ApiClient.dio.get('/teacher/evaluation/types');
     _check(res);
-    return (res.data as List)
-        .map((e) => EvaluationType.fromJson(e as Map<String, dynamic>))
+    return _asList(res.data)
+        .map((e) => EvaluationType.fromJson(_asMap(e)))
         .toList();
   }
 
@@ -62,7 +105,7 @@ class TeacherApi {
       queryParameters: _qp({'classId': classId, 'subjectId': subjectId, 'month': month}),
     );
     _check(res);
-    return EvaluationBoard.fromJson(res.data as Map<String, dynamic>);
+    return EvaluationBoard.fromJson(_asMap(res.data));
   }
 
   static Future<void> setEvalGrade(
@@ -90,15 +133,15 @@ class TeacherApi {
   static Future<List<Assignment>> assignments() async {
     final res = await ApiClient.dio.get('/teacher/assignments');
     _check(res);
-    return (res.data as List)
-        .map((e) => Assignment.fromJson(e as Map<String, dynamic>))
+    return _asList(res.data)
+        .map((e) => Assignment.fromJson(_asMap(e)))
         .toList();
   }
 
   static Future<Assignment> createAssignment(SaveAssignmentInput input) async {
     final res = await ApiClient.dio.post('/teacher/assignments', data: input.toJson());
     _check(res);
-    return Assignment.fromJson(res.data as Map<String, dynamic>);
+    return Assignment.fromJson(_asMap(res.data));
   }
 
   static Future<void> updateAssignment(String id, SaveAssignmentInput input) async {
@@ -114,7 +157,7 @@ class TeacherApi {
   static Future<AssignmentResult> assignmentResults(String id) async {
     final res = await ApiClient.dio.get('/teacher/assignments/$id/results');
     _check(res);
-    return AssignmentResult.fromJson(res.data as Map<String, dynamic>);
+    return AssignmentResult.fromJson(_asMap(res.data));
   }
 
   static Future<void> setSubmission(
@@ -131,19 +174,20 @@ class TeacherApi {
   }
 
   static Future<MaterialInput> uploadFile(List<int> bytes, String filename) async {
+    _checkSize(bytes);
     final fd = FormData.fromMap({
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });
     final res = await ApiClient.dio.post('/teacher/uploads', data: fd);
     _check(res);
-    return MaterialInput.fromJson(res.data as Map<String, dynamic>);
+    return MaterialInput.fromJson(_asMap(res.data));
   }
 
   static Future<List<AssignmentType>> assignmentTypes() async {
     final res = await ApiClient.dio.get('/teacher/assignment-types');
     _check(res);
-    return (res.data as List)
-        .map((e) => AssignmentType.fromJson(e as Map<String, dynamic>))
+    return _asList(res.data)
+        .map((e) => AssignmentType.fromJson(_asMap(e)))
         .toList();
   }
 
@@ -152,14 +196,14 @@ class TeacherApi {
   static Future<PortalMeta?> meta() async {
     final res = await ApiClient.dio.get('/teacher/meta');
     _check(res);
-    final data = res.data;
-    return data == null ? null : PortalMeta.fromJson(data as Map<String, dynamic>);
+    final data = _asMapOrNull(res.data);
+    return data == null ? null : PortalMeta.fromJson(data);
   }
 
   static Future<TeacherSchoolInfo> school() async {
     final res = await ApiClient.dio.get('/teacher/school');
     _check(res);
-    return TeacherSchoolInfo.fromJson(res.data as Map<String, dynamic>);
+    return TeacherSchoolInfo.fromJson(_asMap(res.data));
   }
 
   /* ---------- Bildirishnomalar ---------- */
@@ -167,7 +211,7 @@ class TeacherApi {
   static Future<NotificationsResponse> notifications() async {
     final res = await ApiClient.dio.get('/teacher/notifications');
     _check(res);
-    return NotificationsResponse.fromJson(res.data as Map<String, dynamic>);
+    return NotificationsResponse.fromJson(_asMap(res.data));
   }
 
   static Future<void> markNotificationsRead() async {
@@ -214,7 +258,7 @@ class TeacherApi {
       queryParameters: _qp({'month': month}),
     );
     _check(res);
-    return GradingBoard.fromJson(res.data as Map<String, dynamic>);
+    return GradingBoard.fromJson(_asMap(res.data));
   }
 
   static Future<void> setGrade(SetGrade req) async {
@@ -235,6 +279,7 @@ class TeacherApi {
     List<int>? imageBytes,
     String? imageName,
   }) async {
+    if (imageBytes != null) _checkSize(imageBytes);
     final fd = FormData.fromMap({
       'type': type,
       'text': text,
@@ -253,8 +298,8 @@ class TeacherApi {
       queryParameters: _qp({'from': from, 'to': to}),
     );
     _check(res);
-    final data = res.data;
-    return data == null ? null : SalaryLedger.fromJson(data as Map<String, dynamic>);
+    final data = _asMapOrNull(res.data);
+    return data == null ? null : SalaryLedger.fromJson(data);
   }
 
   /* ---------- Guruh OYLIK jurnali ---------- */
@@ -265,7 +310,7 @@ class TeacherApi {
       queryParameters: _qp({'classId': classId, 'month': month}),
     );
     _check(res);
-    return GroupJournal.fromJson(res.data as Map<String, dynamic>);
+    return GroupJournal.fromJson(_asMap(res.data));
   }
 
   /// Bitta katakni belgilash (baho/davomat/uy vazifa/xulq/o'zlashtirish).
@@ -353,7 +398,7 @@ class TeacherApi {
       if (time != null && time.isNotEmpty) 'time': time,
     });
     _check(res);
-    return LessonReschedule.fromJson(res.data as Map<String, dynamic>);
+    return LessonReschedule.fromJson(_asMap(res.data));
   }
 
   /// Ko'chirishni bekor qilish — dars asl kuniga qaytadi.
@@ -367,7 +412,7 @@ class TeacherApi {
   static Future<GroupCurriculum> groupCurriculum(String groupId) async {
     final res = await ApiClient.dio.get('/teacher/curriculum/group/$groupId');
     _check(res);
-    return GroupCurriculum.fromJson(res.data as Map<String, dynamic>);
+    return GroupCurriculum.fromJson(_asMap(res.data));
   }
 
   static Future<void> setGroupCover(String groupId, String itemId, bool covered) async {
@@ -391,7 +436,7 @@ class TeacherApi {
   static Future<List<String>> chatClasses() async {
     final res = await ApiClient.dio.get('/teacher/chat/classes');
     _check(res);
-    return (res.data as List).map((e) => e.toString()).toList();
+    return _asList(res.data).map((e) => e.toString()).toList();
   }
 
   static Future<List<ChatMessage>> chat(String className, {String? since}) async {
@@ -400,8 +445,8 @@ class TeacherApi {
       queryParameters: _qp({'since': since}),
     );
     _check(res);
-    return (res.data as List)
-        .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+    return _asList(res.data)
+        .map((e) => ChatMessage.fromJson(_asMap(e)))
         .toList();
   }
 
@@ -411,14 +456,15 @@ class TeacherApi {
       data: {'text': text},
     );
     _check(res);
-    return ChatMessage.fromJson(res.data as Map<String, dynamic>);
+    return ChatMessage.fromJson(_asMap(res.data));
   }
 
   /// Har bir kanal uchun oxirgi xabar vaqti (kanal nomi -> ISO vaqt yoki null).
   static Future<Map<String, String?>> lastMessages() async {
     final res = await ApiClient.dio.get('/teacher/chat/last-messages');
     _check(res);
-    return Map<String, dynamic>.from(res.data as Map).map((k, v) => MapEntry(k, v as String?));
+    // `v as String?` raqamli qiymatda yiqilardi — `toString()` xavfsizroq.
+    return _asMap(res.data).map((k, v) => MapEntry(k, v?.toString()));
   }
 
   /* ---------- O'quvchilar reytingi (o'z guruhlari, ball bo'yicha) ---------- */
@@ -430,7 +476,7 @@ class TeacherApi {
     // Tana bo'sh kelishi ham mumkin (204 / bo'sh javob → dio `''` beradi, `null` emas):
     // bunda `as Map` cast xatosi "Reytingni yuklab bo'lmadi" bo'lib ko'rinardi.
     if (data is! Map) return null;
-    return TeacherRating.fromJson(Map<String, dynamic>.from(data));
+    return TeacherRating.fromJson(_asMap(data));
   }
 
   /* ---------- Test natijalari (o'z guruhlari) ---------- */
@@ -442,8 +488,8 @@ class TeacherApi {
       queryParameters: {'classId': classId},
     );
     _check(res);
-    return (res.data as List)
-        .map((e) => GroupTest.fromJson(e as Map<String, dynamic>))
+    return _asList(res.data)
+        .map((e) => GroupTest.fromJson(_asMap(e)))
         .toList();
   }
 
@@ -451,18 +497,19 @@ class TeacherApi {
   static Future<TestResultDetail> testDetail(String id) async {
     final res = await ApiClient.dio.get('/teacher/test-results/$id');
     _check(res);
-    return TestResultDetail.fromJson(res.data as Map<String, dynamic>);
+    return TestResultDetail.fromJson(_asMap(res.data));
   }
 
   /// Onlayn test savollari faylini yuklash (PDF/rasm, maks 20 MB).
   /// Backend: POST /api/teacher/test-results/uploads (form-data maydoni — `file`).
   static Future<MaterialInput> uploadTestFile(List<int> bytes, String filename) async {
+    _checkSize(bytes);
     final fd = FormData.fromMap({
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });
     final res = await ApiClient.dio.post('/teacher/test-results/uploads', data: fd);
     _check(res);
-    return MaterialInput.fromJson(res.data as Map<String, dynamic>);
+    return MaterialInput.fromJson(_asMap(res.data));
   }
 
   /// Yangi test yaratish (o'z guruhiga). `online` berilsa va `mode`="online" bo'lsa —
@@ -483,7 +530,7 @@ class TeacherApi {
       if (online != null) 'online': online.toJson(),
     });
     _check(res);
-    return GroupTest.fromJson(res.data as Map<String, dynamic>);
+    return GroupTest.fromJson(_asMap(res.data));
   }
 
   /// Testni tahrirlash. `online` berilmasa — testning joriy rejimi SAQLANADI
@@ -521,7 +568,7 @@ class TeacherApi {
       data: {'studentId': studentId, 'score': score},
     );
     _check(res);
-    return TestResultDetail.fromJson(res.data as Map<String, dynamic>);
+    return TestResultDetail.fromJson(_asMap(res.data));
   }
 
   /* ---------- Shartnoma (faqat o'ziniki) ---------- */
@@ -535,7 +582,7 @@ class TeacherApi {
     // Tana bo'sh kelishi mumkin (204 / bo'sh javob → dio `''` beradi, `null` emas).
     if (data is! List) return <ContractDoc>[];
     return data
-        .map((e) => ContractDoc.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map((e) => ContractDoc.fromJson(_asMap(e)))
         .toList();
   }
 }
