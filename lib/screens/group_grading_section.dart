@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../api/api_client.dart';
 import '../api/teacher_api.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -53,6 +54,12 @@ class _GroupGradingSectionState extends State<GroupGradingSection> {
     _load(widget.initialMonth);
   }
 
+  /// `doneKey` shakli — "criterionId|date"; sanani ajratib olamiz.
+  static String _dateOfKey(String key) {
+    final i = key.lastIndexOf('|');
+    return i < 0 ? '' : key.substring(i + 1);
+  }
+
   String get _todayIso {
     final n = DateTime.now();
     return '${n.year.toString().padLeft(4, '0')}-'
@@ -82,15 +89,24 @@ class _GroupGradingSectionState extends State<GroupGradingSection> {
             : b.dates.contains(_todayIso)
                 ? _todayIso
                 : (b.dates.isEmpty ? '' : b.dates.last);
+        // BUG-S6: server oyning HAMMA belgisini qaytaradi (ko'chirilgan yoki
+        // o'chirilgan darslarnikini ham), `total` esa faqat `dates × criteria`
+        // dan hisoblanadi → chipda "31 / 30 · 103%" chiqib qolardi. Shuning
+        // uchun faqat JORIY `dates` ichidagi belgilarni olamiz.
+        final validDates = b.dates.toSet();
         _done
           ..clear()
           ..addAll(
-            b.students.expand((st) => st.doneKeys.map((k) => '${st.studentId}|$k')),
+            b.students.expand(
+              (st) => st.doneKeys
+                  .where((k) => validDates.contains(_dateOfKey(k)))
+                  .map((k) => '${st.studentId}|$k'),
+            ),
           );
       });
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString();
+      final msg = e is ApiException ? e.message : "Baholash jadvalini yuklab bo'lmadi";
       setState(() {
         _loading = false;
         // Taxta allaqachon ko'rinib turgan bo'lsa uni yo'qotmaymiz — faqat xabar beramiz.
@@ -137,7 +153,7 @@ class _GroupGradingSectionState extends State<GroupGradingSection> {
           _done.add(key);
         }
       });
-      _toast(e.toString());
+      _toast(e is ApiException ? e.message : "Belgini saqlab bo'lmadi");
     } finally {
       if (mounted) setState(() => _saving.remove(key));
     }
@@ -192,7 +208,7 @@ class _GroupGradingSectionState extends State<GroupGradingSection> {
           ..clear()
           ..addAll(prev);
       });
-      _toast(e.toString());
+      _toast(e is ApiException ? e.message : "Ommaviy belgilash saqlanmadi");
     } finally {
       if (mounted) setState(() => _bulkSaving = false);
     }

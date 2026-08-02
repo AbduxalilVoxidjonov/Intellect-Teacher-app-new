@@ -290,11 +290,24 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
   TestResultDetail? _detail;
   bool _loading = true;
   String? _error;
-  String? _savingId;
   bool _showKey = false;
+
+  /// Ayni paytda saqlanayotgan o'quvchilar — qorovul HAR O'QUVCHI uchun alohida
+  /// bo'lishi shart, aks holda A ning bali saqlanayotganda B ning bali jimgina
+  /// yo'qoladi (P1-3).
+  final Set<String> _savingIds = <String>{};
 
   final Map<String, TextEditingController> _ctrls = {};
   final Map<String, FocusNode> _nodes = {};
+
+  /// Har bir `FocusNode` ga qo'yilgan "blur" tinglovchisi — tugun ro'yxatdan
+  /// chiqarilganda uni AVVAL olib tashlash kerak (aks holda dispose paytida
+  /// endi mavjud bo'lmagan o'quvchi uchun `_save` chaqiriladi).
+  final Map<String, VoidCallback> _blurListeners = {};
+
+  /// Serverdan oxirgi marta sinxronlangan matn — foydalanuvchi yozgan, lekin
+  /// hali saqlanmagan qiymatni bosib yozmaslik uchun (U3).
+  final Map<String, String> _serverText = {};
 
   @override
   void initState() {
@@ -304,6 +317,10 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
 
   @override
   void dispose() {
+    for (final e in _nodes.entries) {
+      final l = _blurListeners[e.key];
+      if (l != null) e.value.removeListener(l);
+    }
     for (final c in _ctrls.values) {
       c.dispose();
     }
@@ -315,33 +332,89 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
 
   String _fmtScore(double? s) => s == null ? '' : _num(s);
 
-  void _syncControllers(TestResultDetail d) {
+  /// Ro'yxatdagi o'quvchini xavfsiz topish (`firstWhere` `orElse`siz — P1-1).
+  TestScoreRow? _rowFor(TestResultDetail d, String studentId) {
+    for (final r in d.rows) {
+      if (r.studentId == studentId) return r;
+    }
+    return null;
+  }
+
+  /// Ro'yxatdan chiqib ketgan (o'chirilgan/muzlatilgan) o'quvchilarning
+  /// kontroller va fokus tugunlarini tozalaydi — ular saqlanib qolsa, "blur"
+  /// tinglovchisi endi mavjud bo'lmagan id uchun `_save` chaqiradi (P1-1).
+  void _pruneControllers(Set<String> aliveIds) {
+    final stale = <String>{
+      ..._ctrls.keys.where((id) => !aliveIds.contains(id)),
+      ..._nodes.keys.where((id) => !aliveIds.contains(id)),
+    };
+    if (stale.isEmpty) return;
+    for (final id in stale) {
+      final ctrl = _ctrls.remove(id);
+      final node = _nodes.remove(id);
+      final listener = _blurListeners.remove(id);
+      _serverText.remove(id);
+      if (node != null && listener != null) node.removeListener(listener);
+      // Dispose keyingi freymga qoldiriladi: eski daraxtdagi `TextField` hali
+      // shu kontrollerga bog'langan bo'lishi mumkin.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ctrl?.dispose();
+        node?.dispose();
+      });
+    }
+  }
+
+  /// [forceIds] — saqlash MUVAFFAQIYATLI tugagan o'quvchilar: ularning maydoni
+  /// server qiymati bilan albatta yangilanadi.
+  void _syncControllers(TestResultDetail d, {Set<String> forceIds = const {}}) {
+    _pruneControllers({for (final r in d.rows) r.studentId});
     for (final r in d.rows) {
       final ctrl = _ctrls.putIfAbsent(r.studentId, () => TextEditingController());
       final node = _nodes.putIfAbsent(r.studentId, () {
         final n = FocusNode();
         // Fokus yo'qolganda saqlanadi (web `onBlur` bilan bir xil).
-        n.addListener(() {
+        void listener() {
           if (!n.hasFocus) _save(r.studentId);
-        });
+        }
+
+        _blurListeners[r.studentId] = listener;
+        n.addListener(listener);
         return n;
       });
-      if (!node.hasFocus) ctrl.text = _fmtScore(r.score);
+      final server = _fmtScore(r.score);
+      // Foydalanuvchi yozgan, lekin hali saqlanmagan matnni BOSIB YOZMAYMIZ
+      // (pull-to-refresh yoki boshqa o'quvchining javobi kelganda — U3/P1-3).
+      final untouched = ctrl.text == (_serverText[r.studentId] ?? '');
+      if (!node.hasFocus && (untouched || forceIds.contains(r.studentId))) {
+        ctrl.text = server;
+      }
+      _serverText[r.studentId] = server;
     }
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    // Ma'lumot allaqachon bor bo'lsa — butun ro'yxatni spinnerga almashtirmaymiz
+    // (pull-to-refresh paytida scroll o'rni yo'qolmasin — U3).
+    if (_detail == null) {
+      setState(() => _loading = true);
+    }
     try {
       final d = await TeacherApi.testDetail(widget.testId);
       if (!mounted) return;
       _syncControllers(d);
       setState(() {
         _detail = d;
+        _error = null;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
+      if (_detail != null) {
+        // Yuklangan ro'yxat xato satri bilan almashtirilmaydi — faqat xabar.
+        _toastDetail(e.toString());
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -349,35 +422,44 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
     }
   }
 
+  void _toastDetail(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   Future<void> _save(String studentId) async {
     final d = _detail;
-    if (d == null || _savingId != null) return;
+    // Qorovul HAR O'QUVCHI uchun alohida (P1-3).
+    if (d == null || _savingIds.contains(studentId)) return;
+    final row = _rowFor(d, studentId);
+    // O'quvchi ro'yxatdan chiqib ketgan — saqlash mumkin emas (P1-1).
+    if (row == null) return;
     final raw = (_ctrls[studentId]?.text ?? '').trim().replaceAll(',', '.');
-    final current = d.rows.firstWhere((r) => r.studentId == studentId).score;
+    final current = row.score;
     final next = raw.isEmpty ? null : double.tryParse(raw);
     if (raw.isNotEmpty && (next == null || next < 0 || next > d.maxScore)) {
-      // Noto'g'ri qiymat — eski holatga qaytaramiz.
+      // Noto'g'ri qiymat — eski holatga qaytaramiz va SABABINI aytamiz (U6).
       _ctrls[studentId]?.text = _fmtScore(current);
-      if (mounted && next != null && next > d.maxScore) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Ball 0 dan ${_num(d.maxScore)} gacha bo'lishi kerak")),
-        );
-      }
+      _serverText[studentId] = _fmtScore(current);
+      _toastDetail(next == null
+          ? "Ball faqat son bo'lishi kerak"
+          : "Ball 0 dan ${_num(d.maxScore)} gacha bo'lishi kerak");
       return;
     }
     if (next == current) return; // o'zgarmagan
-    setState(() => _savingId = studentId);
+    setState(() => _savingIds.add(studentId));
     try {
       final updated = await TeacherApi.setTestScore(widget.testId, studentId, next);
       if (!mounted) return;
-      _syncControllers(updated);
+      _syncControllers(updated, forceIds: {studentId});
       setState(() => _detail = updated);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       _ctrls[studentId]?.text = _fmtScore(current);
+      _serverText[studentId] = _fmtScore(current);
     } finally {
-      if (mounted) setState(() => _savingId = null);
+      if (mounted) setState(() => _savingIds.remove(studentId));
     }
   }
 
@@ -512,12 +594,11 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
   Future<void> _openFile(String url) async {
     final full = url.startsWith('http') ? url : '$kFileBaseUrl$url';
     try {
-      await launchUrl(Uri.parse(full), mode: LaunchMode.externalApplication);
+      // `launchUrl` `false` qaytarsa fayl OCHILMAGAN — jimgina qolib ketmasin (N5).
+      final ok = await launchUrl(Uri.parse(full), mode: LaunchMode.externalApplication);
+      if (!ok) _toastDetail("Faylni ochib bo'lmadi");
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Faylni ochib bo'lmadi")));
-      }
+      _toastDetail("Faylni ochib bo'lmadi");
     }
   }
 
@@ -566,7 +647,7 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          if (_savingId == r.studentId)
+          if (_savingIds.contains(r.studentId))
             SizedBox(
                 width: 18,
                 height: 18,
@@ -651,7 +732,9 @@ class _TestFormSheetState extends State<TestFormSheet> {
     _date = e != null ? (DateTime.tryParse(e.date) ?? DateTime.now()) : DateTime.now();
     _pdfUrl = o.pdfUrl;
     _pdfName = o.pdfName;
-    _options = o.optionCount < 2 ? 4 : o.optionCount;
+    // Dropdown faqat 2..6 ni biladi — chegaradan chiqqan qiymat oynani butunlay
+    // ochilmaydigan qilib qo'yadi (P1-2).
+    _options = o.optionCount < 2 ? 4 : o.optionCount.clamp(2, 6);
     _key = o.answerKey.split('').map((ch) => ch == '-' ? '' : ch).toList();
     _start = _parseTime(o.startAt, const TimeOfDay(hour: 9, minute: 0));
     _end = _parseTime(o.endAt, const TimeOfDay(hour: 11, minute: 0));
@@ -670,18 +753,36 @@ class _TestFormSheetState extends State<TestFormSheet> {
     if (iso.length < 16) return fallback;
     final h = int.tryParse(iso.substring(11, 13));
     final m = int.tryParse(iso.substring(14, 16));
-    if (h == null || m == null) return fallback;
+    // Buzuq vaqt ("99:99") `TimeOfDay(hour: 99)` yasab, ekranga ham,
+    // `showTimePicker` ga ham o'sha holicha uzatilardi (N6).
+    if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) return fallback;
     return TimeOfDay(hour: h, minute: m);
   }
 
   String _hhmm(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
+  /// Savollar sonining yuqori chegarasi.
+  static const int _maxQuestions = 200;
+
   /// Savollar soni (1..200).
   int get _qCount {
     final n = int.tryParse(_count.text.trim()) ?? 0;
     if (n <= 0) return 0;
-    return n > 200 ? 200 : n;
+    return n > _maxQuestions ? _maxQuestions : n;
+  }
+
+  /// Maydonga 200 dan katta son yozilsa u JIMGINA qisqartirilmaydi — maydonning
+  /// o'zi 200 ga tuzatiladi va sabab ko'rsatiladi (U5).
+  void _onCountChanged(String value) {
+    final n = int.tryParse(value.trim());
+    if (n != null && n > _maxQuestions) {
+      _count.text = '$_maxQuestions';
+      _count.selection = TextSelection.collapsed(offset: _count.text.length);
+      setState(() => _error = "Savollar soni ko'pi bilan $_maxQuestions ta bo'lishi mumkin");
+      return;
+    }
+    setState(() {});
   }
 
   /// Kalit massivi savollar soniga moslanadi (kiritilganlar saqlanadi).
@@ -703,7 +804,8 @@ class _TestFormSheetState extends State<TestFormSheet> {
 
   /// Kalitni matndan to'ldirish: "abcdab..." — faqat ruxsat etilgan harflar tartib bilan olinadi.
   void _applyBulk() {
-    final allowed = _letters.take(_options).toList();
+    // `_options` har doim 2..6 oralig'ida bo'lishi kerak (P1-2).
+    final allowed = _letters.take(_options.clamp(2, 6)).toList();
     final letters = _bulkKey.text
         .toUpperCase()
         .split('')
@@ -722,6 +824,37 @@ class _TestFormSheetState extends State<TestFormSheet> {
       _bulkKey.clear();
       _error = null;
     });
+  }
+
+  /// Oflaynga o'tish — yuklangan fayl va javoblar kaliti SAQLANMAYDI, shuning
+  /// uchun avval tasdiq so'raladi (U4/R4).
+  Future<void> _switchToOffline() async {
+    if (!_online) return;
+    final hasOnlineData = _pdfUrl.isNotEmpty || _key.any((k) => k.isNotEmpty);
+    if (hasOnlineData) {
+      final c = AppTheme.of(context);
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Oflaynga o'tkazilsinmi?"),
+          content: const Text(
+              "Saqlaganingizda yuklangan savollar fayli va javoblar kaliti o'chib ketadi."),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor qilish')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text("O'tkazish", style: TextStyle(color: c.red)),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    if (!mounted) return;
+    // Ma'lumot ATAYLAB o'chirilmaydi — o'qituvchi fikridan qaytsa, "Onlayn"ga
+    // qaytganda fayl ham, kalit ham joyida turadi.
+    setState(() => _online = false);
   }
 
   Future<void> _pickFile() async {
@@ -902,7 +1035,7 @@ class _TestFormSheetState extends State<TestFormSheet> {
                         title: 'Oflayn',
                         sub: "Ballni qo'lda kiritasiz",
                         active: !_online,
-                        onTap: () => setState(() => _online = false)),
+                        onTap: _switchToOffline),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -965,7 +1098,7 @@ class _TestFormSheetState extends State<TestFormSheet> {
                         keyboardType: TextInputType.number,
                         style: TextStyle(color: c.text),
                         decoration: _dec(c, 'Savollar soni'),
-                        onChanged: (_) => setState(() {}),
+                        onChanged: _onCountChanged,
                       ),
                     ),
                     const SizedBox(width: 10),

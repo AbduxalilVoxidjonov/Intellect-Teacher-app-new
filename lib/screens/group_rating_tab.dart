@@ -46,10 +46,50 @@ class _RatingMonthData {
   const _RatingMonthData(this.journal, this.grading);
 }
 
+/// Butun reyting hisob-kitobining NATIJASI — `_load` da BIR MARTA hisoblanadi.
+/// Ilgari hammasi `build()` ichida edi va har bir qayta chizishda (masalan oy
+/// chipiga bosilganda) qaytadan bajarilardi (N4).
+class _RatingView {
+  final List<GradingBoardCriterion> criteria;
+  final List<_StudentStat> stats;
+
+  /// `null` — baholash ma'lumoti yo'q (yiqilgan yoki sana yo'q), foiz ko'rsatib
+  /// bo'lmaydi; `0%` deb ko'rsatish YOLG'ON bo'lardi (P1-17).
+  final int? avgPercentage;
+  final int totalDatesSum;
+  final int totalPossible;
+  final Map<String, Map<String, int>> doneByStudentCriterion;
+
+  const _RatingView({
+    required this.criteria,
+    required this.stats,
+    required this.avgPercentage,
+    required this.totalDatesSum,
+    required this.totalPossible,
+    required this.doneByStudentCriterion,
+  });
+
+  static const empty = _RatingView(
+    criteria: <GradingBoardCriterion>[],
+    stats: <_StudentStat>[],
+    avgPercentage: null,
+    totalDatesSum: 0,
+    totalPossible: 0,
+    doneByStudentCriterion: <String, Map<String, int>>{},
+  );
+}
+
 class _GroupRatingTabState extends State<GroupRatingTab> {
   /// Tanlangan oylar — KO'P TANLOVLI (kamida 1 oy tanlangan qoladi).
   List<String> _selected = const [];
-  List<_RatingMonthData> _data = const [];
+
+  /// Tayyor (memoizatsiya qilingan) hisob-kitob.
+  _RatingView _view = _RatingView.empty;
+
+  /// Jurnali yoki baholash jadvali yuklanmagan oylar — foydalanuvchiga
+  /// ko'rsatiladi, aks holda reyting jimgina noto'g'ri bo'lib qoladi (P1-17).
+  List<String> _failedMonths = const [];
+
   bool _loading = true;
 
   /// Ketma-ket so'rovlarda eskirgan javob yangisini bosib ketmasligi uchun token
@@ -101,7 +141,8 @@ class _GroupRatingTabState extends State<GroupRatingTab> {
     return [months.last];
   }
 
-  /// Xatoni yutib nullga aylantiradi — bitta oy yuklanmasa, u shunchaki tashlab yuboriladi.
+  /// Xatoni yutib nullga aylantiradi — bitta oy yuklanmasa, u shunchaki tashlab
+  /// yuboriladi, LEKIN yiqilgani `_failedMonths` ga yozilib qoladi.
   Future<T?> _safe<T>(Future<T> f) async {
     try {
       return await f;
@@ -115,7 +156,8 @@ class _GroupRatingTabState extends State<GroupRatingTab> {
     if (widget.groupId.isEmpty || months.isEmpty) {
       if (mounted) {
         setState(() {
-          _data = const [];
+          _view = _RatingView.empty;
+          _failedMonths = const [];
           _loading = false;
         });
       }
@@ -123,6 +165,8 @@ class _GroupRatingTabState extends State<GroupRatingTab> {
     }
     final token = ++_reqId;
     setState(() => _loading = true);
+
+    final failed = <String>[];
 
     // Har oy uchun jurnal + baholash PARALLEL yuklanadi (barcha oylar ham parallel).
     final loaded = await Future.wait(months.map((m) async {
@@ -132,16 +176,153 @@ class _GroupRatingTabState extends State<GroupRatingTab> {
       ]);
       final journal = pair[0] as GroupJournal?;
       final grading = pair[1] as GradingBoard?;
+      // Yiqilgan so'rov — reyting TO'LIQ EMAS (P1-17).
+      if (journal == null || grading == null) failed.add(m);
       // Jurnal kelmagan oy hisobga olinmaydi (web: `r[0] != null` filtri).
       if (journal == null) return null;
       return _RatingMonthData(journal, grading);
     }));
 
     if (!mounted || token != _reqId) return;
+    final data = loaded.whereType<_RatingMonthData>().toList();
+    failed.sort();
     setState(() {
-      _data = loaded.whereType<_RatingMonthData>().toList();
+      _view = _buildView(data);
+      _failedMonths = failed;
       _loading = false;
     });
+  }
+
+  /* ------------------------- Hisob-kitob (memoizatsiya) ------------------------- */
+
+  /// Butun reyting yig'indisi — `build()` da EMAS, faqat ma'lumot o'zgarganda
+  /// bir marta hisoblanadi (N4).
+  _RatingView _buildView(List<_RatingMonthData> data) {
+    // Baholash mezonlari bor bo'lgan birinchi oy — mezonlar ro'yxati doim guruh
+    // darajasida bir xil, shuning uchun birinchi topilgani yetarli.
+    var criteria = const <GradingBoardCriterion>[];
+    for (final d in data) {
+      if (d.grading != null) {
+        criteria = d.grading!.criteria;
+        break;
+      }
+    }
+
+    // MUZLATILGAN o'quvchilar reytingga kirmaydi — Jurnal/Davomat ham ularni
+    // chiqarib tashlaydi (`group_detail_screen.dart` → `status != 'frozen'`).
+    // Bitta oyda muzlatilgan bo'lsa, barcha tanlangan oylarda chiqariladi (P1-16).
+    final frozenIds = <String>{
+      for (final d in data)
+        for (final s in d.journal.students)
+          if (s.status == 'frozen') s.studentId,
+    };
+
+    // O'quvchilar ro'yxati — tanlangan oylardagi barcha (baholash yoki jurnal)
+    // o'quvchilarning birlashmasi; ism `grading` dan ustun (web bilan bir xil).
+    final studentNameById = <String, String>{};
+    for (final d in data) {
+      for (final s in d.grading?.students ?? const <GradingBoardStudent>[]) {
+        if (frozenIds.contains(s.studentId)) continue;
+        studentNameById[s.studentId] = s.fullName;
+      }
+      for (final s in d.journal.students) {
+        if (s.status == 'frozen') continue;
+        studentNameById.putIfAbsent(s.studentId, () => s.fullName);
+      }
+    }
+
+    // Tanlangan OYLAR bo'yicha yig'indi: jurnal bahosi, bajarilgan mezonlar
+    // (jami va har mezon bo'yicha).
+    final journalTotalByStudent = <String, int>{};
+    final doneTotalByStudent = <String, int>{};
+    final doneByStudentCriterion = <String, Map<String, int>>{};
+    var totalDatesSum = 0;
+
+    for (final d in data) {
+      // "studentId|date" → yozuv (bir sanada bir nechta yozuv bo'lsa oxirgisi qoladi,
+      // JS'dagi `new Map(...)` bilan bir xil).
+      final entryMap = <String, JournalEntry>{};
+      for (final e in d.journal.entries) {
+        entryMap['${e.studentId}|${e.date}'] = e;
+      }
+      for (final studentId in studentNameById.keys) {
+        var total = 0;
+        for (final col in d.journal.columns) {
+          final e = entryMap['$studentId|${col.date}'];
+          final g = e?.grade;
+          if (g != null && g != 0) total += g;
+        }
+        if (total > 0) {
+          journalTotalByStudent[studentId] = (journalTotalByStudent[studentId] ?? 0) + total;
+        }
+      }
+      final grading = d.grading;
+      if (grading != null) {
+        totalDatesSum += grading.dates.length;
+        for (final s in grading.students) {
+          if (frozenIds.contains(s.studentId)) continue;
+          final doneKeys = s.doneKeys.toSet();
+          doneTotalByStudent[s.studentId] = (doneTotalByStudent[s.studentId] ?? 0) + doneKeys.length;
+          final critMap = doneByStudentCriterion.putIfAbsent(s.studentId, () => <String, int>{});
+          for (final key in doneKeys) {
+            final critId = key.split('|').first;
+            critMap[critId] = (critMap[critId] ?? 0) + 1;
+          }
+        }
+      }
+    }
+
+    final totalPossible = totalDatesSum * criteria.length;
+
+    // Har o'quvchi uchun kombinlangan reyting = jurnal bahosi + bajarilgan mezonlar.
+    final stats = <_StudentStat>[];
+    var idx = 0;
+    studentNameById.forEach((studentId, fullName) {
+      final journalTotal = journalTotalByStudent[studentId] ?? 0;
+      final done = doneTotalByStudent[studentId] ?? 0;
+      // Baholash ma'lumoti bo'lmasa foiz NOMA'LUM (0% emas — P1-17).
+      final percentage = totalPossible > 0 ? (done / totalPossible * 100).round() : null;
+      final criteriaStats = [
+        for (final crit in criteria)
+          _CritStat(
+            criterion: crit,
+            done: doneByStudentCriterion[studentId]?[crit.id] ?? 0,
+            total: totalDatesSum,
+          ),
+      ];
+      stats.add(_StudentStat(
+        order: idx++,
+        studentId: studentId,
+        fullName: fullName,
+        journalTotal: journalTotal,
+        done: done,
+        totalPossible: totalPossible,
+        percentage: percentage,
+        criteriaStats: criteriaStats,
+        combinedRating: journalTotal + done,
+      ));
+    });
+    // Kombinlangan reyting bo'yicha saralash (katta → kichik). Dart'dagi sort
+    // barqaror emas, shuning uchun teng ballda dastlabki tartib saqlanadi —
+    // web'dagi stabil `Array.sort` bilan natija bir xil bo'ladi.
+    stats.sort((a, b) {
+      final d = b.combinedRating - a.combinedRating;
+      return d != 0 ? d : a.order - b.order;
+    });
+
+    // O'rtacha foiz — baholash ma'lumoti bo'lmasa ko'rsatilmaydi.
+    final avgPercentage = (totalPossible <= 0 || stats.isEmpty)
+        ? null
+        : (stats.fold<int>(0, (s, st) => s + (st.percentage ?? 0)) / stats.length).round();
+
+    return _RatingView(
+      criteria: criteria,
+      stats: stats,
+      avgPercentage: avgPercentage,
+      totalDatesSum: totalDatesSum,
+      totalPossible: totalPossible,
+      doneByStudentCriterion: doneByStudentCriterion,
+    );
   }
 
   void _toggleMonth(String m) {
@@ -174,25 +355,15 @@ class _GroupRatingTabState extends State<GroupRatingTab> {
       );
     }
 
-    // Baholash mezonlari bor bo'lgan birinchi oy — mezonlar ro'yxati doim guruh
-    // darajasida bir xil, shuning uchun birinchi topilgani yetarli.
-    var criteria = const <GradingBoardCriterion>[];
-    for (final d in _data) {
-      if (d.grading != null) {
-        criteria = d.grading!.criteria;
-        break;
-      }
-    }
-    final hasAnyStudents = _data.any(
-      (d) => (d.grading?.students.length ?? 0) > 0 || d.journal.students.isNotEmpty,
-    );
+    final v = _view;
 
-    if (!hasAnyStudents) {
+    if (v.stats.isEmpty) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _monthChips(context),
+          if (_failedMonths.isNotEmpty) _failureBanner(context),
           const SCard(
             child: EmptyState(
               icon: Icons.trending_up_rounded,
@@ -203,114 +374,55 @@ class _GroupRatingTabState extends State<GroupRatingTab> {
       );
     }
 
-    // O'quvchilar ro'yxati — tanlangan oylardagi barcha (baholash yoki jurnal)
-    // o'quvchilarning birlashmasi; ism `grading` dan ustun (web bilan bir xil).
-    final studentNameById = <String, String>{};
-    for (final d in _data) {
-      for (final s in d.grading?.students ?? const <GradingBoardStudent>[]) {
-        studentNameById[s.studentId] = s.fullName;
-      }
-      for (final s in d.journal.students) {
-        studentNameById.putIfAbsent(s.studentId, () => s.fullName);
-      }
-    }
-
-    // Tanlangan OYLAR bo'yicha yig'indi: jurnal bahosi, bajarilgan mezonlar
-    // (jami va har mezon bo'yicha).
-    final journalTotalByStudent = <String, int>{};
-    final doneTotalByStudent = <String, int>{};
-    final doneByStudentCriterion = <String, Map<String, int>>{};
-    var totalDatesSum = 0;
-
-    for (final d in _data) {
-      // "studentId|date" → yozuv (bir sanada bir nechta yozuv bo'lsa oxirgisi qoladi,
-      // JS'dagi `new Map(...)` bilan bir xil).
-      final entryMap = <String, JournalEntry>{};
-      for (final e in d.journal.entries) {
-        entryMap['${e.studentId}|${e.date}'] = e;
-      }
-      for (final studentId in studentNameById.keys) {
-        var total = 0;
-        for (final col in d.journal.columns) {
-          final e = entryMap['$studentId|${col.date}'];
-          final g = e?.grade;
-          if (g != null && g != 0) total += g;
-        }
-        if (total > 0) {
-          journalTotalByStudent[studentId] = (journalTotalByStudent[studentId] ?? 0) + total;
-        }
-      }
-      final grading = d.grading;
-      if (grading != null) {
-        totalDatesSum += grading.dates.length;
-        for (final s in grading.students) {
-          final doneKeys = s.doneKeys.toSet();
-          doneTotalByStudent[s.studentId] = (doneTotalByStudent[s.studentId] ?? 0) + doneKeys.length;
-          final critMap = doneByStudentCriterion.putIfAbsent(s.studentId, () => <String, int>{});
-          for (final key in doneKeys) {
-            final critId = key.split('|').first;
-            critMap[critId] = (critMap[critId] ?? 0) + 1;
-          }
-        }
-      }
-    }
-
-    final totalPossible = totalDatesSum * criteria.length;
-
-    // Har o'quvchi uchun kombinlangan reyting = jurnal bahosi + bajarilgan mezonlar.
-    final stats = <_StudentStat>[];
-    var idx = 0;
-    studentNameById.forEach((studentId, fullName) {
-      final journalTotal = journalTotalByStudent[studentId] ?? 0;
-      final done = doneTotalByStudent[studentId] ?? 0;
-      final percentage = totalPossible > 0 ? (done / totalPossible * 100).round() : 0;
-      final criteriaStats = [
-        for (final crit in criteria)
-          _CritStat(
-            criterion: crit,
-            done: doneByStudentCriterion[studentId]?[crit.id] ?? 0,
-            total: totalDatesSum,
-          ),
-      ];
-      stats.add(_StudentStat(
-        order: idx++,
-        studentId: studentId,
-        fullName: fullName,
-        journalTotal: journalTotal,
-        done: done,
-        totalPossible: totalPossible,
-        percentage: percentage,
-        criteriaStats: criteriaStats,
-        combinedRating: journalTotal + done,
-      ));
-    });
-    // Kombinlangan reyting bo'yicha saralash (katta → kichik). Dart'dagi sort
-    // barqaror emas, shuning uchun teng ballda dastlabki tartib saqlanadi —
-    // web'dagi stabil `Array.sort` bilan natija bir xil bo'ladi.
-    stats.sort((a, b) {
-      final d = b.combinedRating - a.combinedRating;
-      return d != 0 ? d : a.order - b.order;
-    });
-
-    // O'rtacha foiz
-    final avgPercentage = stats.isEmpty
-        ? 0
-        : (stats.fold<int>(0, (s, st) => s + st.percentage) / stats.length).round();
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _monthChips(context),
-        _kpiRow(context, avgPercentage, stats),
+        if (_failedMonths.isNotEmpty) _failureBanner(context),
+        _kpiRow(context, v),
         const SizedBox(height: 10),
-        _table(context, criteria, stats),
+        _table(context, v.criteria, v.stats),
         // Mezonlar 3 tadan ko'p bo'lsa — jadvalga sig'maganlari uchun alohida tahlil.
-        if (criteria.length > 3) ...[
+        if (v.criteria.length > 3) ...[
           const SizedBox(height: 12),
-          _criteriaBreakdown(context, criteria, stats.length, totalDatesSum, doneByStudentCriterion),
+          _criteriaBreakdown(
+              context, v.criteria, v.stats.length, v.totalDatesSum, v.doneByStudentCriterion),
         ],
       ],
+    );
+  }
+
+  /* ------------------------- Yuklanmagan oylar ogohlantirishi ------------------------- */
+
+  /// Bir yoki bir necha oy yuklanmagan bo'lsa — reyting TO'LIQ EMAS. Buni
+  /// yashirish "hamma 0%" degan soxta reyting beradi (P1-17).
+  Widget _failureBanner(BuildContext context) {
+    final c = AppTheme.of(context);
+    final names = _failedMonths.map(fmtMonth).join(', ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SCard(
+        color: c.redSoft,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, size: 18, color: c.red),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "Ma'lumot yuklanmadi ($names) — reyting to'liq emas.",
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.red),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 116,
+              child: SButton('Qayta urinish', kind: BtnKind.soft, onTap: _load),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -351,53 +463,66 @@ class _GroupRatingTabState extends State<GroupRatingTab> {
 
   /* ------------------------- KPI kartalar ------------------------- */
 
-  Widget _kpiRow(BuildContext context, int avgPercentage, List<_StudentStat> stats) {
+  Widget _kpiRow(BuildContext context, _RatingView v) {
+    final stats = v.stats;
+    // Baholash ma'lumoti bo'lmasa (yiqilgan yoki sana yo'q) hech qanday son
+    // ko'rsatilmaydi — "0 / 0%" soxta ma'lumot bo'lardi (P1-17).
+    final known = v.totalPossible > 0;
     final full = stats.where((s) => s.percentage == 100).length;
     final empty = stats.where((s) => s.percentage == 0).length;
     // Mobil ekranda 4 ta karta 2×2 joylashadi (web'da `grid-cols-2 sm:grid-cols-4`).
+    // DIQQAT: `CrossAxisAlignment.stretch` (kartalar bo'yi teng bo'lishi uchun)
+    // faqat BALANDLIGI CHEGARALANGAN `Row` da ishlaydi. Bu tab esa tashqi
+    // `SingleChildScrollView` ichida — balandlik cheksiz. Shu sababli har bir
+    // qator `IntrinsicHeight` bilan o'raladi (aks holda
+    // "BoxConstraints forces an infinite height" bilan yiqiladi).
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: _Kpi(
-                label: "O'rtacha",
-                value: '$avgPercentage%',
-                icon: Icons.trending_up_rounded,
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _Kpi(
+                  label: "O'rtacha",
+                  value: v.avgPercentage == null ? '—' : '${v.avgPercentage}%',
+                  icon: Icons.trending_up_rounded,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _Kpi(
-                label: "Jami o'quvchi",
-                value: '${stats.length}',
-                icon: Icons.group_outlined,
+              const SizedBox(width: 8),
+              Expanded(
+                child: _Kpi(
+                  label: "Jami o'quvchi",
+                  value: '${stats.length}',
+                  icon: Icons.group_outlined,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: _Kpi(
-                label: "To'liq bajarildi",
-                value: '$full',
-                icon: Icons.check_circle_outline_rounded,
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _Kpi(
+                  label: "To'liq bajarildi",
+                  value: known ? '$full' : '—',
+                  icon: Icons.check_circle_outline_rounded,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _Kpi(
-                label: "Bo'sh",
-                value: '$empty',
-                icon: Icons.flag_outlined,
+              const SizedBox(width: 8),
+              Expanded(
+                child: _Kpi(
+                  label: "Bo'sh",
+                  value: known ? '$empty' : '—',
+                  icon: Icons.flag_outlined,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -510,24 +635,27 @@ class _GroupRatingTabState extends State<GroupRatingTab> {
                           context,
                           doneW,
                           heights[s.studentId]!,
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: '${s.done}',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                    color: c.text,
+                          // Baholash ma'lumoti yo'q bo'lsa "0/0" emas, "—" (P1-17).
+                          child: s.totalPossible <= 0
+                              ? Text('—', style: TextStyle(fontSize: 13, color: c.faint))
+                              : Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: '${s.done}',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: c.text,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: '/${s.totalPossible}',
+                                        style: TextStyle(fontSize: 11.5, color: c.faint),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                TextSpan(
-                                  text: '/${s.totalPossible}',
-                                  style: TextStyle(fontSize: 11.5, color: c.faint),
-                                ),
-                              ],
-                            ),
-                          ),
                         ),
                         _numCell(
                           context,
@@ -772,7 +900,9 @@ class _StudentStat {
   final int journalTotal;
   final int done;
   final int totalPossible;
-  final int percentage;
+
+  /// `null` — baholash ma'lumoti yo'q, foiz NOMA'LUM (0% emas).
+  final int? percentage;
   final List<_CritStat> criteriaStats;
   final int combinedRating;
   const _StudentStat({

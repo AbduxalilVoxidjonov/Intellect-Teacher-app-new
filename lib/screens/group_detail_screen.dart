@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../api/api_client.dart';
 import '../api/teacher_api.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -55,6 +56,20 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   List<AbsenceReason> _reasons = [];
   _GroupView _view = _GroupView.jurnal;
 
+  /// Davomat sabablari (`/teacher/meta`) yuklanmadi — kelmagan o'quvchi kataklari
+  /// sabab qisqartmasi o'rniga «?» bilan chiziladi va tepada ogohlantirish turadi.
+  bool _reasonsFailed = false;
+
+  /// Baholash jadvali yuklanmadi — «Jami» ustuni TO'LIQ EMAS (jimgina noto'g'ri
+  /// reyting ko'rsatmaslik uchun raqam o'rniga «—» chiziladi).
+  bool _gradingFailed = false;
+
+  /// So'rov tokeni — oy chiplarini tez bosganda ESKI javob YANGI oy ustiga
+  /// yozilmasligi uchun (namuna: `group_rating_tab.dart:124`). Jurnal ham,
+  /// baholash ham AYNI tokenni tekshiradi — aks holda May'ning baholashi
+  /// Iyun jurnaliga ulanib qolardi.
+  int _reqId = 0;
+
   @override
   void initState() {
     super.initState();
@@ -62,46 +77,78 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     _load();
   }
 
+  /// Xato matni — `ApiException` bo'lsa o'zbekcha `message`, aks holda umumiy matn.
+  String _msg(Object e, String fallback) => e is ApiException ? e.message : fallback;
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _loadReasons() async {
     try {
       final meta = await TeacherApi.meta();
       if (!mounted) return;
-      setState(() => _reasons = meta?.absenceReasons ?? []);
+      setState(() {
+        _reasons = meta?.absenceReasons ?? [];
+        _reasonsFailed = false;
+      });
     } catch (_) {
-      // Sabablar ixtiyoriy — yuklanmasa ham jurnal ishlashda davom etadi.
+      // Sabablar yuklanmasa jurnal ishlashda davom etadi, LEKIN kelmaganlik
+      // yashil ✓ ga aylanib ketmasligi uchun buni yashirmaymiz.
+      if (!mounted) return;
+      setState(() => _reasonsFailed = true);
     }
   }
 
   Future<void> _load([String? month]) async {
+    // C2: `_load` saqlashdan KEYIN (`await`dan so'ng) ham chaqiriladi — o'sha
+    // paytda ekran yopilgan bo'lishi mumkin.
+    if (!mounted) return;
+    final token = ++_reqId;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final j = await TeacherApi.groupJournal(widget.groupId, month: month);
-      if (!mounted) return;
+      if (!mounted || token != _reqId) return;
       setState(() {
         _journal = j;
         _loading = false;
       });
-      _loadGrading(j.month);
+      _loadGrading(j.month, token);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || token != _reqId) return;
+      final msg = _msg(e, "Jurnalni yuklab bo'lmadi");
       setState(() {
-        _error = e.toString();
         _loading = false;
+        // U2: allaqachon ko'rinib turgan jurnalni bitta muvaffaqiyatsiz
+        // yangilash uchun YO'QOTMAYMIZ — faqat xabar beramiz
+        // (namuna: `group_grading_section.dart:96-99`).
+        if (_journal == null) _error = msg;
       });
+      if (_journal != null) _toast(msg);
     }
   }
 
-  /// Baholash jadvali — «Jami» ustuni uchun (xatosi jurnalni bloklamaydi).
-  Future<void> _loadGrading(String month) async {
+  /// Baholash jadvali — «Jami» ustuni uchun (xatosi jurnalni bloklamaydi, lekin
+  /// JIMGINA ham qolmaydi: bayroq + ogohlantirish + «—»).
+  Future<void> _loadGrading(String month, [int? token]) async {
     try {
       final g = await TeacherApi.gradingBoard(widget.groupId, month: month);
-      if (!mounted) return;
-      setState(() => _grading = g);
-    } catch (_) {
-      if (mounted) setState(() => _grading = null);
+      if (!mounted || (token != null && token != _reqId)) return;
+      setState(() {
+        _grading = g;
+        _gradingFailed = false;
+      });
+    } catch (e) {
+      if (!mounted || (token != null && token != _reqId)) return;
+      setState(() {
+        _grading = null;
+        _gradingFailed = true;
+      });
+      _toast(_msg(e, "Baholash jadvali yuklanmadi — «Jami» to'liq emas"));
     }
   }
 
@@ -110,11 +157,25 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     return '${n.year.toString().padLeft(4, '0')}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
   }
 
+  /// R3: sanalarni SOLISHTIRISHDAN oldin "yyyy-MM-dd" ga qisqartiramiz — server
+  /// bir joyda `2026-03-05`, boshqa joyda `2026-03-05T00:00:00` qaytarsa ham
+  /// taqqoslash buzilmasin (bo'lmasa a'zolik boshlangan kun «berk» bo'lib qolardi).
+  static String _dayKey(String date) => date.length > 10 ? date.substring(0, 10) : date;
+
   JournalEntry? _entryFor(GroupJournal j, String studentId, String date) {
+    final key = _dayKey(date);
     for (final e in j.entries) {
-      if (e.studentId == studentId && e.date == date) return e;
+      if (e.studentId == studentId && _dayKey(e.date) == key) return e;
     }
     return null;
+  }
+
+  bool _isConducted(GroupJournal j, String date) {
+    final key = _dayKey(date);
+    for (final d in j.conductedDates) {
+      if (_dayKey(d) == key) return true;
+    }
+    return false;
   }
 
   /// Faol (muzlatilmagan) o'quvchilar, «Jami» bo'yicha kamayish tartibida saralangan —
@@ -130,6 +191,10 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       final s = base[i];
       var journalTotal = 0;
       for (final col in j.columns) {
+        // P1-5: a'zolik (yoki guruh) boshlanishidan OLDINGI katak bo'sh va
+        // BOSILMAYDIGAN qilib chiziladi — o'qituvchi u yerdagi bahoni o'chira
+        // olmaydi, shuning uchun u «Jami»ga ham qo'shilmasligi kerak.
+        if (_isBeforeStart(j, s, col.date)) continue;
         final e = _entryFor(j, s.studentId, col.date);
         if (e?.grade != null) journalTotal += e!.grade!;
       }
@@ -148,13 +213,31 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
   /// Shu oyga ko'chirilgan darslar: yangi kun (toDate) → ko'chirish yozuvi.
   Map<String, LessonReschedule> _rescheduledByDate(GroupJournal j) => {
-        for (final r in j.reschedules) r.toDate: r,
+        for (final r in j.reschedules) _dayKey(r.toDate): r,
       };
 
   bool _isBeforeStart(GroupJournal j, GroupJournalStudent s, String date) {
-    final beforeMember = s.memberStart.isNotEmpty && date.compareTo(s.memberStart) < 0;
-    final beforeGroup = j.group.startDate.isNotEmpty && date.compareTo(j.group.startDate) < 0;
+    final d = _dayKey(date);
+    final beforeMember =
+        s.memberStart.isNotEmpty && d.compareTo(_dayKey(s.memberStart)) < 0;
+    final beforeGroup =
+        j.group.startDate.isNotEmpty && d.compareTo(_dayKey(j.group.startDate)) < 0;
     return beforeMember || beforeGroup;
+  }
+
+  /// Jurnal katagi (`_cell`) shu darsni o'quvchi uchun UMUMAN hisobga oladimi.
+  ///
+  /// P1-4: Davomat tabi ayni shu qoidadan foydalanishi shart — aks holda grid
+  /// «·» chizadigan darslar Davomatda "keldi" bo'lib sanaladi va foiz ham,
+  /// dars soni ham shishib ketadi.
+  bool _countsForAttendance(GroupJournal j, GroupJournalStudent s, String date) {
+    if (_isBeforeStart(j, s, date)) return false;
+    final e = _entryFor(j, s.studentId, date);
+    // Aniq belgi bor (baho / sabab / «keldi (bor)») — dars albatta hisobga olinadi.
+    if (e != null && (e.grade != null || e.reasonId != null || e.present)) return true;
+    // Belgisiz dars faqat `presentDefaultFrom` dan keyin avto-"keldi" bo'ladi.
+    return s.presentDefaultFrom.isEmpty ||
+        _dayKey(date).compareTo(_dayKey(s.presentDefaultFrom)) >= 0;
   }
 
   void _alert(String message) {
@@ -187,6 +270,10 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     );
     if (result == null || !mounted) return;
     setState(() => _saving = true);
+    // DIQQAT: qayta yuklash (`_load`) SAQLASH try/catch'idan TASHQARIDA —
+    // u o'z xatosini o'zi ko'rsatadi va, eng muhimi, uning `mounted` qorovuli
+    // (C2) shu yerdagi `catch` tomonidan jimgina yutilmaydi.
+    var saved = false;
     try {
       if (result.clear) {
         await TeacherApi.clearJournalEntry(journal.group.id, journal.group.courseId, s.studentId, date);
@@ -204,19 +291,23 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           present: result.present,
         );
       }
-      await _load(journal.month);
+      saved = true;
     } catch (e) {
-      if (mounted) _alert(e.toString());
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) _alert(_msg(e, "Saqlab bo'lmadi — qayta urinib ko'ring"));
     }
+    if (saved) await _load(journal.month);
+    if (mounted) setState(() => _saving = false);
   }
 
   /// Sarlavhadagi sana bosilganda — hammaga birdan davomat + darsni ko'chirish.
   Future<void> _openBulk(String date) async {
     final journal = _journal;
     if (journal == null) return;
-    final students = _scoredStudents(journal);
+    // R2: shu SANADA hali guruhga qo'shilmagan o'quvchilarga yozmaymiz — ularning
+    // kataklari gridda ataylab bo'sh va bosilmaydigan qilib chizilgan.
+    final students = _scoredStudents(journal)
+        .where((s) => !_isBeforeStart(journal, s.student, date))
+        .toList();
     final c = AppTheme.of(context);
     final result = await showModalBottomSheet<_BulkResult>(
       context: context,
@@ -234,6 +325,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     );
     if (result == null || !mounted) return;
     setState(() => _saving = true);
+    // `_openCell` bilan bir xil qoida (C2): qayta yuklash try/catch'dan tashqarida.
+    var saved = false;
     try {
       switch (result.kind) {
         case _BulkKind.attendance:
@@ -259,12 +352,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           await TeacherApi.cancelReschedule(result.rescheduleId!);
           break;
       }
-      await _load(journal.month);
+      saved = true;
     } catch (e) {
-      if (mounted) _alert(e.toString());
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) _alert(_msg(e, "Saqlab bo'lmadi — qayta urinib ko'ring"));
     }
+    if (saved) await _load(journal.month);
+    if (mounted) setState(() => _saving = false);
   }
 
   @override
@@ -290,10 +383,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   }
 
   Widget _body(BuildContext context) {
-    if (_error != null) {
+    final journal = _journal;
+    // U2: xato FAQAT hech nima yuklanmagan bo'lsa butun ekranni egallaydi;
+    // yuklangan jurnal ustidan xato satri chizilmaydi (toast beriladi).
+    if (_error != null && journal == null) {
       return Center(child: EmptyState(icon: Icons.error_outline, text: _error!));
     }
-    final journal = _journal;
     if (_loading && journal == null) {
       return const Loader(label: 'Yuklanmoqda...');
     }
@@ -509,8 +604,50 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           _monthChips(context, journal),
           const SizedBox(height: 10),
         ],
+        ..._warnings(context),
         _gridArea(context, journal, students, reasonById),
       ],
+    );
+  }
+
+  /// Ma'lumot TO'LIQ EMASligi haqidagi ko'rinadigan ogohlantirishlar
+  /// (jimgina noto'g'ri jurnal/reyting ko'rsatmaslik uchun).
+  List<Widget> _warnings(BuildContext context) {
+    final out = <Widget>[];
+    if (_reasonsFailed) {
+      out
+        ..add(_warnBanner(context,
+            "Davomat sabablari yuklanmadi — kelmagan o'quvchi katagi «?» bilan chiziladi."))
+        ..add(const SizedBox(height: 8));
+    }
+    if (_gradingFailed) {
+      out
+        ..add(_warnBanner(context,
+            "Baholash jadvali yuklanmadi — «Jami» ustuni va tartib to'liq emas."))
+        ..add(const SizedBox(height: 8));
+    }
+    return out;
+  }
+
+  Widget _warnBanner(BuildContext context, String text) {
+    final c = AppTheme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: c.amberSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.amber.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 17, color: c.amber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: TextStyle(fontSize: 12, color: c.text, height: 1.35)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -676,7 +813,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     children: [
                       for (final col in journal.columns)
                         _dateHeaderCell(context, col.date, cellW, rowH,
-                            moved: rescheduled.containsKey(col.date)),
+                            moved: rescheduled.containsKey(_dayKey(col.date))),
                       _totalHeaderCell(context, totalW, rowH),
                     ],
                   ),
@@ -702,7 +839,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final c = AppTheme.of(context);
     final dt = DateTime.tryParse(date);
     final wd = dt != null ? _weekdayShort[(dt.weekday - 1) % 7] : '';
-    final isToday = date == _todayIso;
+    final isToday = _dayKey(date) == _todayIso;
     return GestureDetector(
       onTap: () => _openBulk(date),
       child: Container(
@@ -765,19 +902,24 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   ) {
     final c = AppTheme.of(context);
     final entry = _entryFor(journal, s.studentId, date);
-    final reason = entry?.reasonId != null ? reasonById[entry!.reasonId] : null;
+    final reasonId = entry?.reasonId;
+    final reason = reasonId == null ? null : reasonById[reasonId];
+    // P0-3: sabab KODI bo'lsa — o'quvchi KELMAGAN, sabab ro'yxatdan topilgan-topilmagani
+    // muhim emas. (`/teacher/meta` yiqilsa yoki sabab Sozlamalardan o'chirilsa qidiruv
+    // bo'sh qaytadi — ilgari bu butun tarixni yashil ✓ ga aylantirar edi.)
+    final absent = reasonId != null;
     final disabled = _isBeforeStart(journal, s, date);
-    final isToday = date == _todayIso;
+    final isToday = _dayKey(date) == _todayIso;
     // Keldi (yashil): dars o'tildi + baho yo'q + sabab yo'q + (ANIQ "keldi" belgisi BOR yoki
     // sana o'quvchi tizimga kiritilganidan (presentDefaultFrom) keyin) — orqaga sanalgan
     // a'zolikda ko'rib chiqilmagan darslar avto-"keldi" bo'lmaydi (web bilan bir xil).
     final present = !disabled &&
         entry?.grade == null &&
-        reason == null &&
-        journal.conductedDates.contains(date) &&
+        !absent &&
+        _isConducted(journal, date) &&
         ((entry?.present ?? false) ||
             s.presentDefaultFrom.isEmpty ||
-            date.compareTo(s.presentDefaultFrom) >= 0);
+            _dayKey(date).compareTo(_dayKey(s.presentDefaultFrom)) >= 0);
 
     Color? bg;
     Color fg;
@@ -792,17 +934,24 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       bg = gradeCellBg(entry!.grade!);
       fg = gradeCellFg(entry.grade!);
       label = '${entry.grade}';
+    } else if (absent) {
+      // P1-6: KELMAGANLIK o'zlashtirish emojisidan USTUN — aks holda kelmagan
+      // o'quvchi 🙋 bo'lib ko'rinib qolardi.
+      final isLate = reason?.isLate ?? false;
+      bg = isLate ? c.amberSoft : c.redSoft;
+      fg = isLate ? c.amber : c.red;
+      label = reason == null
+          // Sabab nomi noma'lum (meta yiqilgan yoki sabab o'chirilgan) — lekin
+          // "kelmadi" fakti YO'QOLMAYDI.
+          ? '?'
+          : (reason.short.isNotEmpty
+              ? reason.short
+              : (reason.name.length >= 2 ? reason.name.substring(0, 2) : reason.name));
     } else if (entry?.mastery != null) {
       final m = _masteryStyle(entry!.mastery!, c);
       bg = m.bg;
       fg = m.fg;
       label = m.label;
-    } else if (reason != null) {
-      bg = reason.isLate ? c.amberSoft : c.redSoft;
-      fg = reason.isLate ? c.amber : c.red;
-      label = reason.short.isNotEmpty
-          ? reason.short
-          : (reason.name.length >= 2 ? reason.name.substring(0, 2) : reason.name);
     } else if (present) {
       bg = c.greenSoft;
       fg = c.green;
@@ -836,6 +985,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   Widget _totalCell(BuildContext context, _ScoredStudent s, double w, double h) {
     final c = AppTheme.of(context);
     final total = s.combinedTotal;
+    // P0-4: baholash yuklanmagan bo'lsa yig'indi TO'LIQ EMAS — 0 ni ham, jurnal-only
+    // raqamni ham ishonchli qilib ko'rsatmaymiz, «—» chizamiz (tepada ogohlantirish bor).
+    final known = !_gradingFailed && total > 0;
     return Container(
       width: w,
       height: h,
@@ -846,15 +998,15 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         height: 34,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: total > 0 ? c.accentSoft : null,
+          color: known ? c.accentSoft : null,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          total > 0 ? '$total' : '—',
+          known ? '$total' : '—',
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w800,
-            color: total > 0 ? c.accentD : c.faint,
+            color: known ? c.accentD : c.faint,
           ),
         ),
       ),
@@ -878,6 +1030,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_reasonsFailed) ...[
+          _warnBanner(context,
+              "Davomat sabablari yuklanmadi — foizlar to'liq bo'lmasligi mumkin."),
+          const SizedBox(height: 8),
+        ],
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
           child: Row(
@@ -948,9 +1105,10 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     Set<String> lateIds,
     int number,
   ) {
-    // O'quvchi guruhga qo'shilgandan (memberStart) keyingi o'tilgan darslar.
+    // P1-4: jurnal gridi bilan AYNI qoida — grid «·» chizadigan darslar bu yerda
+    // ham "keldi" deb sanalmaydi (a'zolik/guruh boshlanishi + `presentDefaultFrom`).
     final myConducted = journal.conductedDates
-        .where((d) => st.memberStart.isEmpty || d.compareTo(st.memberStart) >= 0)
+        .where((d) => _countsForAttendance(journal, st, d))
         .toList();
     final total = myConducted.length;
     var absences = 0;
@@ -1032,6 +1190,33 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       ),
     );
   }
+}
+
+/// U1: buzuvchi amal oldidan tasdiq oynasi — namuna `group_tests_panel.dart:97-110`.
+/// "Tozalash", "✗ Hammasi kelmadi" va "Asl kuniga qaytarish" bitta bosishda
+/// qaytarib bo'lmaydigan ma'lumot yo'qotishga olib keladi.
+Future<bool> _confirmDestructive(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String okLabel,
+}) async {
+  final c = AppTheme.of(context);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor qilish')),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(okLabel, style: TextStyle(color: c.red)),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
 }
 
 /// Dars o'zlashtirish darajasi rangi/emoji (web `masteryDisplay`).
@@ -1155,7 +1340,14 @@ class _JournalCellSheetState extends State<_JournalCellSheet> {
   /// "Keldi" va "kelmadi (sabab)" bir vaqtda bo'lmaydi — biri tanlansa ikkinchisi o'chadi.
   void _toggleReason(String id) => setState(() {
         _reasonId = _reasonId == id ? null : id;
-        if (_reasonId != null) _present = false;
+        if (_reasonId != null) {
+          _present = false;
+          // P1-6: kelmagan o'quvchida "darsga munosabat" ma'nosiz — «keldi»
+          // bayrog'i kabi u ham tozalanadi. KECH KELGAN mustasno: u darsda
+          // qatnashgan, munosabati ham, bahosi ham bo'lishi mumkin.
+          final isLate = widget.reasons.any((r) => r.id == _reasonId && r.isLate);
+          if (!isLate) _mastery = null;
+        }
       });
 
   void _togglePresent() => setState(() {
@@ -1299,7 +1491,19 @@ class _JournalCellSheetState extends State<_JournalCellSheet> {
                   'Tozalash',
                   kind: BtnKind.danger,
                   large: true,
-                  onTap: () => Navigator.of(context).pop(const _CellSheetResult(clear: true)),
+                  // U1: tasdiqsiz bosilsa baho + davomat + uy vazifa + xulq +
+                  // o'zlashtirish BIRDANIGA yo'qolardi (tugma «Saqlash» ustida turadi).
+                  onTap: () async {
+                    final ok = await _confirmDestructive(
+                      context,
+                      title: 'Katakni tozalash',
+                      message: "Bu katakdagi baho, davomat, uy vazifa, xulq va "
+                          "darsga munosabat — hammasi o'chiriladi.",
+                      okLabel: "Ha, o'chirilsin",
+                    );
+                    if (!ok || !context.mounted) return;
+                    Navigator.of(context).pop(const _CellSheetResult(clear: true));
+                  },
                 ),
               ),
             Row(
@@ -1522,7 +1726,19 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
               '✗ Hammasi kelmadi',
               kind: BtnKind.danger,
               large: true,
-              onTap: () => Navigator.of(context).pop(const _BulkResult.attendance(true, null)),
+              // U1: «✓ Hammasi keldi» dan atigi 10px pastda turadi — tasodifan
+              // bosilsa butun guruh yo'q deb belgilanardi.
+              onTap: () async {
+                final ok = await _confirmDestructive(
+                  context,
+                  title: 'Hammasi kelmadi',
+                  message: "${widget.count} o'quvchining hammasi shu darsda KELMAGAN "
+                      'deb belgilanadi.',
+                  okLabel: 'Ha, belgilansin',
+                );
+                if (!ok || !context.mounted) return;
+                Navigator.of(context).pop(const _BulkResult.attendance(true, null));
+              },
             ),
             if (widget.reasons.isNotEmpty) ...[
               const SizedBox(height: 13),
@@ -1577,7 +1793,18 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
                 'Asl kuniga qaytarish',
                 icon: Icons.restore_rounded,
                 kind: BtnKind.ghost,
-                onTap: () => Navigator.of(context).pop(_BulkResult.cancel(moved.id)),
+                // U1: ko'chirish bekor qilinganda shu kundagi jurnal ustuni yo'qoladi.
+                onTap: () async {
+                  final ok = await _confirmDestructive(
+                    context,
+                    title: 'Asl kuniga qaytarish',
+                    message: 'Bu dars ${fmtDate(moved.fromDate)} kuniga qaytariladi va '
+                        "ko'chirilgan kun jurnaldan olib tashlanadi.",
+                    okLabel: 'Ha, qaytarilsin',
+                  );
+                  if (!ok || !context.mounted) return;
+                  Navigator.of(context).pop(_BulkResult.cancel(moved.id));
+                },
               ),
             ] else if (!_moveOpen)
               SButton(
