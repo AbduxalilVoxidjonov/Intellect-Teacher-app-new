@@ -7,24 +7,42 @@ import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/shell.dart';
 
-void main() async {
+/// 401 kelganda ochilgan sub-ekranlarni yopib, ildizga qaytarish uchun.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  final session = Session()
+    ..onLoggedOut = () =>
+        appNavigatorKey.currentState?.popUntil((r) => r.isFirst);
+
+  // UI DARHOL chiziladi: `session.ready` `false` bo'lgani uchun `_Splash`
+  // ko'rinadi. Avval bu yerda `Firebase.initializeApp()` va push ruxsati
+  // KUTILARDI — birinchi o'rnatishda ilova native splash'da qotib turardi
+  // (foydalanuvchi bildirishnoma so'roviga javob bermaguncha Flutter UI
+  // umuman chizilmasdi).
+  runApp(
+    ChangeNotifierProvider.value(value: session, child: const TeacherApp()),
+  );
+
+  _bootstrap(session);
+}
+
+/// Og'ir ishga tushirish — birinchi kadr chizilgandan keyin.
+Future<void> _bootstrap(Session session) async {
+  await session.init();
   // Firebase + push (xato bo'lsa ilova baribir ishlaydi).
   try {
     await Firebase.initializeApp();
     await PushService.instance.init();
   } catch (e) {
     debugPrint('[firebase] init error: $e');
+    return;
   }
-  final session = Session();
-  await session.init();
   // Allaqachon kirgan bo'lsa — token'ni backend'ga yuboramiz.
   if (session.isAuthed) {
     PushService.instance.syncToken();
   }
-  runApp(
-    ChangeNotifierProvider.value(value: session, child: const TeacherApp()),
-  );
 }
 
 class TeacherApp extends StatelessWidget {
@@ -36,6 +54,7 @@ class TeacherApp extends StatelessWidget {
     final colors = session.isDark ? AppColors.dark : AppColors.light;
     return MaterialApp(
       title: "Intellect Teacher",
+      navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
       theme: buildMaterialTheme(colors),
       builder: (context, child) => AppTheme(colors: colors, child: child ?? const SizedBox()),

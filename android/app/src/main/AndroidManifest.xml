@@ -15,9 +15,16 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
 
+    <!-- allowBackup=false: sessiya tokeni SharedPreferences'da saqlanadi.
+         Android'ning standart qiymati `true` bo'lgani uchun `shared_prefs`
+         fayli (token + foydalanuvchi ma'lumoti) Google Drive zaxirasiga
+         yuklanib, istalgan yangi qurilmaga tiklanardi. -->
     <application
         android:label="Intellect Teacher"
         android:name="${applicationName}"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

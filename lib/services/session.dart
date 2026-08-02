@@ -15,14 +15,34 @@ class Session extends ChangeNotifier {
   bool _dark = false;
   bool _ready = false;
 
+  /// Chiqish jarayoni ketayaptimi — 401 kelganda qayta-qayta `logout()` ni
+  /// qo'zg'atmaslik uchun (aks holda cheksiz sikl hosil bo'ladi, pastga qarang).
+  bool _loggingOut = false;
+
+  /// Chiqilganda chaqiriladi — `main.dart` buni Navigator'ni ildizga
+  /// qaytarishga ulaydi. Bunsiz 401 kelganda `MaterialApp.home` LoginScreen'ga
+  /// o'tardi-yu, ochilgan sub-ekran (Maosh, Shartnomalar) stack tepasida
+  /// qolaverardi va o'lik sessiyada ishlayotgandek ko'rinardi.
+  VoidCallback? onLoggedOut;
+
   String? get token => _token;
   Map<String, dynamic>? get user => _user;
   bool get isAuthed => _token != null;
   bool get isDark => _dark;
   bool get ready => _ready;
 
-  String get fullName => (_user?['fullName'] as String?) ?? '';
-  String? get teacherId => _user?['id'] as String?;
+  /// DIQQAT: qiymat serverdan/`SharedPreferences`dan kelgani uchun turi
+  /// kafolatlanmaydi. Xom `as String?` cast'i raqamli `fullName`/`id` kelganda
+  /// `build()` ichida `TypeError` berib ekranni yiqitardi.
+  String get fullName {
+    final v = _user?['fullName'];
+    return v == null ? '' : v.toString();
+  }
+
+  String? get teacherId {
+    final v = _user?['id'];
+    return v == null ? null : v.toString();
+  }
 
   Future<void> init() async {
     final p = await SharedPreferences.getInstance();
@@ -30,7 +50,7 @@ class Session extends ChangeNotifier {
     final u = p.getString(_kUser);
     if (u != null) {
       try {
-        _user = jsonDecode(u) as Map<String, dynamic>;
+        _user = _asUser(jsonDecode(u));
       } catch (_) {}
     }
     _dark = p.getString(_kTheme) == 'dark';
@@ -40,6 +60,15 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Kalitlari String bo'lgan map — `jsonDecode` odatda shuni beradi, lekin
+  /// buzuq saqlangan qiymat butun kirishni yiqitmasligi kerak.
+  static Map<String, dynamic>? _asUser(dynamic v) {
+    if (v is! Map) return null;
+    final out = <String, dynamic>{};
+    v.forEach((k, val) => out[k.toString()] = val);
+    return out;
+  }
+
   Future<String?> login(String email, String password) async {
     try {
       final res = await ApiClient.dio.post('/auth/login', data: {
@@ -47,50 +76,103 @@ class Session extends ChangeNotifier {
         'password': password,
       });
       if (!ApiClient.ok(res)) {
+        // DIQQAT: `/auth/login` da 401 "sessiya tugadi" EMAS — ASP.NET
+        // `Unauthorized()` ni tanasiz qaytaradi va bu "parol noto'g'ri"
+        // degani. Shuning uchun bu yerda `errorMessage`ning umumiy 401
+        // matnini ishlatmaymiz (429/403 uchun esa u to'g'ri matn beradi).
+        if (res.statusCode == 401) {
+          final d = res.data;
+          final serverMsg = d is Map && d['message'] is String ? d['message'] as String : null;
+          return serverMsg ?? "Login yoki parol noto'g'ri";
+        }
         return ApiClient.errorMessage(res, "Login yoki parol noto'g'ri");
       }
-      final data = res.data as Map<String, dynamic>;
-      final token = data['token'] as String?;
-      final user = (data['user'] as Map?)?.cast<String, dynamic>();
-      if (token == null) return 'Server javobi noto\'g\'ri';
+      // DIQQAT: bu yerda xom `as Map<String, dynamic>` cast'i turgan edi.
+      // `TypeError` — `Exception` emas, `Error`, shuning uchun uni quyidagi
+      // `catch` ham, `login_screen.dart` dagi chaqiruvchi ham tutmasdi:
+      // spinner abadiy aylanardi. Endi tur tekshirib ko'riladi.
+      // 200 bo'lsa ham tana bo'sh (`''`/`null`) yoki HTML bo'lishi mumkin.
+      final data = res.data;
+      if (data is! Map) return "Server javobi noto'g'ri";
+      final token = data['token'];
+      if (token is! String || token.isEmpty) return "Server javobi noto'g'ri";
+      final user = _asUser(data['user']);
       // Faqat o'qituvchi rolini bu ilovaga kiritamiz.
-      final role = user?['role'] as String?;
-      if (role != null && role != 'teacher') {
-        return 'Bu ilova faqat o\'qituvchilar uchun';
+      // Rol umuman kelmasa kiritamiz (ba'zi backend javoblarida `role` yo'q) —
+      // haqiqiy himoya baribir serverdagi `[Authorize(Roles=...)]`.
+      final role = user?['role'];
+      if (role != null && role.toString() != 'teacher') {
+        return "Bu ilova faqat o'qituvchilar uchun";
       }
       await _persist(token, user);
       return null; // muvaffaqiyat
-    } on Exception {
-      return 'Serverga ulanib bo\'lmadi. Internetni tekshiring.';
+    } on ApiException catch (e) {
+      // 5xx/timeout/tarmoq — `api_client.dart` allaqachon o'zbekcha matn beradi.
+      return e.message;
+    } catch (_) {
+      return "Serverga ulanib bo'lmadi. Internetni tekshiring.";
     }
   }
 
+  /// Avval DISKKA yoziladi, keyin xotira holati o'zgaradi: yozuv yiqilsa ilova
+  /// "xotirada kirgan, lekin login ekranida" degan chalkash holatda qolmaydi.
   Future<void> _persist(String token, Map<String, dynamic>? user) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_kToken, token);
+    if (user != null) {
+      try {
+        await p.setString(_kUser, jsonEncode(user));
+      } catch (_) {
+        await p.remove(_kUser); // kodlanmaydigan qiymat — user'siz davom etamiz
+      }
+    } else {
+      await p.remove(_kUser);
+    }
     _token = token;
     _user = user;
     ApiClient.token = token;
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_kToken, token);
-    if (user != null) await p.setString(_kUser, jsonEncode(user));
-    // Kirgach FCM token'ni backend'ga yuboramiz.
-    PushService.instance.syncToken();
+    _loggingOut = false;
     notifyListeners();
+    // Kirgach FCM token'ni backend'ga yuboramiz. KUTILMAYDI va xatosi
+    // login natijasiga ta'sir qilmaydi — aks holda Firebase ishlamagan
+    // qurilmada muvaffaqiyatli login "Serverga ulanib bo'lmadi" bo'lib ko'rinardi.
+    try {
+      PushService.instance.syncToken();
+    } catch (_) {}
   }
 
+  /// 401 kelganda chaqiriladi.
+  ///
+  /// QOROVUL: bunsiz cheksiz sikl bor edi — `logout()` → `PushService.clear()`
+  /// → tokensiz `DELETE /notifications/register` → 401 → yana `logout()`...
+  /// Sikl ishlaganda login muvaffaqiyatli bo'lsa ham foydalanuvchi darhol
+  /// chiqarib yuborilardi va ilovani yopmaguncha kira olmasdi.
   void _onUnauthorized() {
+    if (_token == null || _loggingOut) return;
     logout();
   }
 
   Future<void> logout() async {
-    // Chiqishdan oldin push token'ni backend'dan o'chiramiz.
-    await PushService.instance.clear();
+    if (_loggingOut) return;
+    _loggingOut = true;
+    // 1) UI darhol login ekraniga qaytsin — tarmoqni kutmaydi.
     _token = null;
     _user = null;
-    ApiClient.token = null;
+    notifyListeners();
+    onLoggedOut?.call();
+    // 2) Saqlangan sessiyani o'chiramiz.
     final p = await SharedPreferences.getInstance();
     await p.remove(_kToken);
     await p.remove(_kUser);
-    notifyListeners();
+    // 3) Push token'ni backend'dan o'chiramiz. `ApiClient.token` ATAYLAB hali
+    //    tozalanmagan: DELETE so'rovi `Authorization` bilan ketishi kerak.
+    //    Kutish 5 soniya bilan chegaralangan (avval 20+30 s timeout'da UI
+    //    hech qanday indikatorsiz muzlab qolardi).
+    try {
+      await PushService.instance.clear().timeout(const Duration(seconds: 5));
+    } catch (_) {}
+    ApiClient.token = null;
+    _loggingOut = false;
   }
 
   Future<void> setDark(bool v) async {

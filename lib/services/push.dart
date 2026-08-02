@@ -150,12 +150,19 @@ class PushService {
   static final PushService instance = PushService._();
 
   final _fln = FlutterLocalNotificationsPlugin();
-  bool _inited = false;
   String? _lastToken;
 
-  Future<void> init() async {
-    if (_inited) return;
-    _inited = true;
+  /// Ketayotgan `POST /register` — `clear()` uni kutadi (tartib muhim).
+  Future<void>? _registering;
+
+  /// `init()` TUGAGUNCHA saqlanadigan future. Avval `bool _inited` bayrog'i
+  /// eng boshida `true` qilinardi — ikkinchi chaqiruv darhol qaytib ketardi va
+  /// shu oynada kelgan push hali ishga tushmagan plagin ustida ko'rsatilardi.
+  Future<void>? _initFuture;
+
+  Future<void> init() => _initFuture ??= _init();
+
+  Future<void> _init() async {
 
     // Fon handleri.
     FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
@@ -214,11 +221,17 @@ class PushService {
       final token = await FirebaseMessaging.instance.getToken();
       if (token == null) return;
       _lastToken = token;
-      // Test uchun: shu tokenni Firebase Console → Cloud Messaging → "Send test
-      // message" ga qo'yib, backend'siz push kelishini tekshirish mumkin.
-      debugPrint('[push] ============ FCM TOKEN ============');
-      debugPrint('[push] $token');
-      debugPrint('[push] ===================================');
+      // DIQQAT: `debugPrint` RELEASE build'da ham ishlaydi. To'liq FCM token
+      // logcat'ga tushsa, unga kira olgan har kim (ADB, MDM log yig'uvchi,
+      // crash-reporter) o'qituvchining qurilmasiga push yubora oladi.
+      // Shuning uchun to'liq token faqat debug'da chiqadi.
+      if (kDebugMode) {
+        // Test uchun: shu tokenni Firebase Console → Cloud Messaging → "Send
+        // test message" ga qo'yib, backend'siz push kelishini tekshirish mumkin.
+        debugPrint('[push] ============ FCM TOKEN ============');
+        debugPrint('[push] $token');
+        debugPrint('[push] ===================================');
+      }
       await _sendToBackend(token);
     } catch (e) {
       debugPrint('[push] syncToken error: $e');
@@ -226,14 +239,34 @@ class PushService {
   }
 
   /// Chiqishda token'ni backend'dan o'chiradi.
+  ///
+  /// QOROVUL: sessiya yo'q bo'lsa umuman so'rov yubormaymiz. Bunsiz cheksiz
+  /// sikl bor edi — tokensiz `DELETE` → 401 → `logout()` → yana shu metod...
   Future<void> clear() async {
+    if (ApiClient.token == null) {
+      _lastToken = null;
+      return;
+    }
     try {
+      // Ro'yxatdan o'tkazish so'rovi hali ketayotgan bo'lsa kutamiz: aks holda
+      // `POST /register` `DELETE /register` dan KEYIN yetib borib, chiqqandan
+      // so'ng ham qurilma push olishda davom etardi (umumiy telefonda muhim).
+      await _registering;
       final token = _lastToken ?? await FirebaseMessaging.instance.getToken();
       if (token != null) await TeacherApi.unregisterPushToken(token);
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _lastToken = null;
+    }
   }
 
-  Future<void> _sendToBackend(String token) async {
+  Future<void> _sendToBackend(String token) {
+    final f = _register(token);
+    _registering = f;
+    return f;
+  }
+
+  Future<void> _register(String token) async {
     // Tizimga kirmagan bo'lsak yubormaymiz: endpoint `[Authorize]` — 401 qaytadi,
     // 401 esa `onUnauthorized` → logout'ni ishga tushiradi. `onTokenRefresh`
     // login'dan OLDIN ham otishi mumkin, shuning uchun shu qorovul kerak.
@@ -251,8 +284,9 @@ class PushService {
       debugPrint('[push] token backend\'ga yozildi');
     } on ApiException catch (e) {
       // Status kod bilan — 401 (sessiya tugagan), 403 (rol/ruxsat), 404 (server
-      // eski) sabablarini ajratish uchun.
-      debugPrint('[push] register token error: ${e.details}');
+      // eski) sabablarini ajratish uchun. Javob TANASI ataylab chiqarilmaydi:
+      // `e.details` release logida serverning xom javobini oshkor qilardi.
+      debugPrint('[push] register token error: [${e.statusCode ?? '-'}] ${e.message}');
     } catch (e) {
       debugPrint('[push] register token error: $e');
     }
@@ -264,6 +298,11 @@ class PushService {
   }
 
   void _showForeground(RemoteMessage m) {
+    // iOS'da banner'ni OS'ning O'ZI ko'rsatadi
+    // (`setForegroundNotificationPresentationOptions(alert: true, ...)`).
+    // Bu yerda yana bir marta ko'rsatsak — ikkita banner va ikkita ovoz bo'lardi.
+    // Android foreground'da hech nima ko'rsatmaydi, shuning uchun u yerda shart.
+    if (!Platform.isAndroid) return;
     final t = _extract(m);
     if (t.title == null && t.body == null) {
       debugPrint('[push] foreground: bo\'sh payload — ko\'rsatilmadi (${m.data})');
