@@ -625,6 +625,35 @@ void main() {
       expect(ApiClient.token, isNull);
     });
 
+    // Qorovul `finally` ichida bo'lishi SHART: `logout()` o'rtasida
+    // `SharedPreferences` yiqilsa `_loggingOut` `true` bo'lib qolib,
+    // `_onUnauthorized` BUTUNLAY o'chib qolardi va ilova keyin 401 ga
+    // umuman javob bermay qo'yardi. Bu test qorovul qayta ochilishini
+    // tekshiradi: chiqib, qayta kirib, yana 401 olsak — logout ishlashi kerak.
+    test('logout qorovuli qayta ochiladi — keyingi sessiyada 401 yana ishlaydi',
+        () async {
+      final s = await loggedIn();
+      await s.logout();
+      expect(ApiClient.token, isNull);
+
+      // Ikkinchi sessiya.
+      fake.enqueueJson({
+        'token': 't2',
+        'user': {'id': 'u1', 'fullName': 'Ali', 'role': 'teacher'},
+      });
+      expect(await s.login('a@b.c', 'p'), isNull);
+      expect(s.isAuthed, isTrue);
+
+      var n = 0;
+      s.addListener(() => n++);
+      fake.always(FakeResponse(401, ''));
+      await ApiClient.dio.get('/teacher/me');
+      await Future<void>.delayed(Duration.zero);
+      expect(n, 1, reason: 'qorovul ochiq qolsa 401 e\'tiborsiz qolardi');
+      expect(s.isAuthed, isFalse);
+      expect(ApiClient.token, isNull);
+    });
+
     test('BUG-A8 (TUZATILDI): chiqilgandan keyingi 401 logout\'ni qo\'zg\'amaydi', () async {
       final s = await loggedIn();
       await s.logout();

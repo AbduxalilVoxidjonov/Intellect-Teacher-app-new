@@ -160,19 +160,29 @@ class Session extends ChangeNotifier {
     _user = null;
     notifyListeners();
     onLoggedOut?.call();
-    // 2) Saqlangan sessiyani o'chiramiz.
-    final p = await SharedPreferences.getInstance();
-    await p.remove(_kToken);
-    await p.remove(_kUser);
-    // 3) Push token'ni backend'dan o'chiramiz. `ApiClient.token` ATAYLAB hali
-    //    tozalanmagan: DELETE so'rovi `Authorization` bilan ketishi kerak.
-    //    Kutish 5 soniya bilan chegaralangan (avval 20+30 s timeout'da UI
-    //    hech qanday indikatorsiz muzlab qolardi).
+    // DIQQAT: qolgan hamma narsa `finally` bilan himoyalangan. Bunsiz
+    // `SharedPreferences` bitta `PlatformException` bersa `_loggingOut`
+    // ABADIY `true` bo'lib qolardi — ya'ni `_onUnauthorized` butunlay
+    // o'chib, ilova 401 ga umuman javob bermay qo'yardi, `ApiClient.token`
+    // esa o'lik token bilan qolib ketardi.
     try {
-      await PushService.instance.clear().timeout(const Duration(seconds: 5));
-    } catch (_) {}
-    ApiClient.token = null;
-    _loggingOut = false;
+      // 2) Saqlangan sessiyani o'chiramiz.
+      final p = await SharedPreferences.getInstance();
+      await p.remove(_kToken);
+      await p.remove(_kUser);
+    } catch (_) {
+      // Diskka yozib bo'lmadi — xotira holati baribir tozalangan.
+    } finally {
+      // 3) Push token'ni backend'dan o'chiramiz. `ApiClient.token` ATAYLAB
+      //    hali tozalanmagan: DELETE so'rovi `Authorization` bilan ketishi
+      //    kerak. Kutish 5 soniya bilan chegaralangan (avval 20+30 s
+      //    timeout'da UI hech qanday indikatorsiz muzlab qolardi).
+      try {
+        await PushService.instance.clear().timeout(const Duration(seconds: 5));
+      } catch (_) {}
+      ApiClient.token = null;
+      _loggingOut = false;
+    }
   }
 
   Future<void> setDark(bool v) async {

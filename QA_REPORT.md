@@ -3,14 +3,14 @@
 **Sana:** 2026-08-01 (audit) / 2026-08-02 (tuzatish) · **Flutter:** 3.44.8 · **Dart:** 3.12.2
 **Qamrov:** `lib/` dagi 31 ta faylning hammasi (12 967 qator) auditdan o'tkazildi.
 
-## HOLAT — 2026-08-02
+## HOLAT — 2026-08-03
 
 Quyidagi hisobotdagi kamchiliklarning **deyarli hammasi tuzatildi**.
 
 | Tekshiruv | Natija |
 |---|---|
 | `flutter analyze` | ✅ No issues found |
-| `flutter test --no-test-assets` | ✅ **767 o'tdi / 6 skip** |
+| `flutter test` | ✅ **768 o'tdi / 6 skip** |
 | `flutter build apk --debug` | ✅ APK qurildi |
 
 - **P0 (8 ta) — hammasi tuzatildi.**
@@ -39,48 +39,49 @@ Quyidagi hisobotdagi kamchiliklarning **deyarli hammasi tuzatildi**.
 
 ---
 
-**Testlar:** 0 → **767 test** (6 tasi `skip`), 9 ta test fayli.
+**Testlar:** 0 → **768 test** (6 tasi `skip`), 9 ta test fayli.
 
 ---
 
 ## 1. Testlarni ishga tushirish
 
-Flutter SDK standart bo'lmagan yo'lda, shuning uchun:
-
 ```bash
-export FLUTTER_ROOT="/Users/me/iCloud Drive (Archive)/Documents/sdk/flutter"
-export PATH="$FLUTTER_ROOT/bin:$PATH"
-cd "/Users/me/iCloud Drive (Archive)/Documents/git/Intellect-Teacher-app-new"
-flutter test --no-test-assets
+export PATH="$HOME/Documents/sdk/flutter/bin:$PATH"
+cd ~/Documents/git/Intellect-Teacher-app-new
+flutter test
 ```
 
-`--no-test-assets` **shart**: loyiha yo'lida qavs bor (`iCloud Drive (Archive)`) va bu
-`flutter_tools`'ning native-asset bosqichida `parseOtoolArchitectureSections` funksiyasini
-yiqitadi. Loyihani qavssiz yo'lga ko'chirsangiz bayroq kerak bo'lmaydi.
+> **Eslatma.** Loyiha avval `~/iCloud Drive (Archive)/Documents/git/...` da turgan edi.
+> Yo'ldagi qavslar (`(Archive)`) `flutter_tools`ning native-asset bosqichini yiqitardi
+> va testlar faqat `--no-test-assets` bilan ishlardi. 2026-08-03 da macOS papkani
+> `~/Documents` ga qaytardi — endi bayroq kerak emas.
+> **Loyihani iCloud sinxronizatsiyasidan tashqarida saqlang:** aynan u ikkala `.git`
+> papkasini ham, 26 ta Android/iOS build faylini ham o'chirib yuborgan edi.
 
 ### Test fayllari
 
 | Fayl | Test | Skip | Nimani qoplaydi |
 |---|---:|---:|---|
-| `test/models_test.dart` | 243 | 17 | `models.dart` — 52 ta klass, barcha `fromJson`/`toJson` |
-| `test/api_client_test.dart` | 126 | 8 | `ApiClient` + 34 ta `TeacherApi` endpoint (soxta Dio adapteri) |
-| `test/session_test.dart` | 44 | 4 | `Session` — login/logout/persist/tema |
-| `test/format_test.dart` | 115 | 9 | `format.dart` + `app_theme.dart` sof funksiyalari |
-| `test/widgets/ui_widgets_test.dart` | 87 | 7 | `ui.dart`, `sub_scaffold.dart`, `AppTheme` |
-| `test/widgets/screens_test.dart` | 32 | 7 | Jurnal, Baholash, Login, Testlar, Maosh ekranlari |
+| `test/models_test.dart` | 262 | 2 | `models.dart` — 52 ta klass, barcha `fromJson`/`toJson` |
+| `test/api_client_test.dart` | 147 | 0 | `ApiClient` + 34 ta `TeacherApi` endpoint (soxta Dio adapteri) |
+| `test/session_test.dart` | 59 | 1 | `Session` — login/logout/persist/tema |
+| `test/format_test.dart` | 113 | 3 | `format.dart` + `app_theme.dart` sof funksiyalari |
+| `test/widgets/ui_widgets_test.dart` | 114 | 0 | `ui.dart`, `sub_scaffold.dart`, `AppTheme` |
+| `test/widgets/screens_test.dart` | 51 | 0 | Jurnal, Baholash, Login, Testlar, Maosh ekranlari |
+| `test/widgets/tests_panel_test.dart` | 22 | 0 | Testlar paneli va guruh Reyting tabi |
 | `test/helpers/fake_api.dart` | — | — | Soxta `HttpClientAdapter` (yangi paket qo'shilmagan) |
 | `test/widgets/screen_harness.dart` | — | — | Ekran testlari uchun harness |
 
 ### `skip` qilingan testlar nimani anglatadi
 
-Har bir tasdiqlangan kamchilik uchun **ikkita** test yozilgan:
+Har bir tasdiqlangan kamchilik uchun **ikkita** test yozilgan edi:
 
-1. **Hozirgi xatti-harakatni qotiruvchi test** (o'tadi) — `// BUG-Xn:` izohi bilan.
-   Kod o'zgarsa bu test yiqiladi va o'zgarish e'tibordan chetda qolmaydi.
-2. **To'g'ri xatti-harakat shartnomasi** (`skip`) — kamchilik tuzatilgach `skip`ni olib
-   tashlaysiz va test yashil bo'lishi kerak.
+1. **Hozirgi xatti-harakatni qotiruvchi test** — `// BUG-Xn:` izohi bilan.
+2. **To'g'ri xatti-harakat shartnomasi** — `skip` bilan.
 
-Ya'ni **52 ta skip = 52 ta hujjatlashtirilgan kamchilik shartnomasi**, e'tiborsizlik emas.
+Kamchilik tuzatilgach `skip` olib tashlanadi, eskirgan qotirish testi esa o'chiriladi.
+Boshida 52 ta skip bor edi; hozir **6 tasi qolgan** — ular xato emas, backend javob
+formatini bilishni talab qiladigan **noaniqliklar** (yuqoridagi HOLAT bo'limiga qarang).
 
 ---
 
@@ -407,7 +408,7 @@ Yiqilishlar va tushunarsiz xato matnlari.
 
 Har bir tuzatishdan keyin:
 ```bash
-flutter test --no-test-assets
+flutter test
 ```
 Tuzatilgan kamchilikning `skip:` bayrog'ini olib tashlang — o'sha test yashil bo'lishi kerak,
 uning juftligi (hozirgi xatti-harakatni qotiruvchi test) esa **yiqilishi kerak** va uni
@@ -417,10 +418,23 @@ o'chirish yoki yangilash lozim. Shu ikkilik tuzatishning haqiqatan ishlaganini i
 
 ## 9. Muhit haqida ogohlantirish
 
-Loyiha va Flutter SDK ikkalasi ham **iCloud Drive** ichida turibdi va ikkalasining ham
-`.git` papkasi qisman yo'q qilingan (`HEAD`, `config`, `refs` yo'qolgan) — iCloud fayllarni
-"evict" qilgani uchun. SDK tiklandi, loyiha repositoriysi ham tiklanmoqda.
+Loyiha va Flutter SDK ikkalasi ham **iCloud Drive (Archive)** ichida turgan edi va u
+jiddiy zarar yetkazdi:
 
-**Tavsiya:** loyihani ham, SDK'ni ham iCloud sinxronizatsiyasidan tashqaridagi papkaga
-(masalan `~/dev/`) ko'chiring. Bu bir vaqtning o'zida `--no-test-assets` zaruriyatini ham
-yo'qotadi (sabab — yo'ldagi qavslar).
+- Ikkala `.git` papkasi ham qisman o'chirilgan edi (`HEAD`, `config`, `refs` yo'q) —
+  na `flutter` buyrug'i, na `git status` ishlardi. Ikkalasi ham qo'lda tiklandi
+  (SDK tarixidagi yo'qolgan obyektlar remote'dan qayta tiklandi).
+- 26 ta tracked Android/iOS build fayli diskdan yo'qolgan edi
+  (`android/build.gradle.kts`, `gradle.properties`, `gradle-wrapper.properties`,
+  `AppDelegate.swift`, barcha `res/` fayllari) — ya'ni **ilova umuman qurilmasdi**.
+  Hammasi commit'dan tiklandi.
+- Yo'ldagi qavslar (`(Archive)`) `flutter_tools`ni yiqitardi.
+
+**2026-08-03 da macOS papkani `~/Documents` ga qaytardi** va muammolar o'z-o'zidan
+hal bo'ldi. Loyiha endi: `~/Documents/git/Intellect-Teacher-app-new`,
+SDK: `~/Documents/sdk/flutter`.
+
+**Tavsiya:** loyihani ham, SDK'ni ham iCloud sinxronizatsiyasidan tashqarida saqlang.
+`~/Documents` macOS'da iCloud'ga ulanishi mumkin — Sozlamalar → Apple ID → iCloud →
+«Desktop & Documents Folders» o'chiq ekanini tekshiring, aks holda hammasi
+takrorlanadi.
