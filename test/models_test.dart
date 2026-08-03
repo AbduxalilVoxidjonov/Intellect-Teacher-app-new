@@ -935,6 +935,14 @@ void main() {
       expect(m.missedLessons, 1);
       expect(m.lessons!.single.groupId, 'g1');
     });
+    test('collected — SHU OY UCHUN yig\'ilgan (foizli maosh bazasi)', () {
+      // To'lov QAYSI OY UCHUN qilingan bo'lsa shu oyga kiradi (to'lov sanasi emas):
+      // 3-avgustda iyul uchun to'langan pul iyul qatorida ko'rinadi.
+      final m = MonthSalary.fromJson({'month': '2026-07', 'collected': 6000000});
+      expect(m.collected, 6000000.0);
+      // Berilmasa 0 — qat'iy maoshda yig'ilgan baza ma'noga ega emas.
+      expect(MonthSalary.fromJson({'month': '2026-07'}).collected, 0.0);
+    });
     test('bo\'sh JSON — ixtiyoriylar null', () {
       final m = MonthSalary.fromJson({});
       expect(m.month, '');
@@ -1696,7 +1704,7 @@ void main() {
     });
 
     group('toJson', () {
-      test('default → 8 ta kalit', () {
+      test('default → 10 ta kalit', () {
         final j = const OnlineTest().toJson();
         expect(j, {
           'mode': 'offline',
@@ -1707,6 +1715,10 @@ void main() {
           'answerKey': '',
           'startAt': '',
           'endAt': '',
+          // TEST KODI — markazdan tashqari ishtirokchi shu kod bilan kiradi.
+          'code': '',
+          // Standart: test guruhga ham e'lon qilinadi.
+          'groupOpen': true,
         });
       });
       test('fromJson → toJson → fromJson aylanma o\'zgarmaydi', () {
@@ -1719,11 +1731,20 @@ void main() {
           'answerKey': 'ABCD',
           'startAt': '2026-08-05T09:00',
           'endAt': '2026-08-05T10:00',
+          'code': 'K7M4QP',
+          'groupOpen': false,
         };
         final once = OnlineTest.fromJson(src);
         final twice = OnlineTest.fromJson(once.toJson());
         expect(twice.toJson(), once.toJson());
         expect(twice.toJson(), src);
+      });
+      test('groupOpen berilmasa — guruhga OCHIQ (eski backend bilan moslik)', () {
+        // Eski server `groupOpen` yubormaydi: testlar birdaniga "faqat kod" bo'lib
+        // o'quvchilar ro'yxatidan yo'qolib qolmasligi kerak.
+        expect(OnlineTest.fromJson(const {'mode': 'online'}).groupOpen, isTrue);
+        expect(
+            OnlineTest.fromJson(const {'mode': 'online', 'groupOpen': false}).groupOpen, isFalse);
       });
       test('parse(toJson()) aylanma', () {
         const t = OnlineTest(mode: 'online', questionCount: 2, answerKey: 'AB');
@@ -1845,6 +1866,56 @@ void main() {
       expect(d.rows, isEmpty);
       expect(d.online.mode, 'offline');
       expect(d.submittedCount, 0);
+      expect(d.externalRows, isEmpty);
+    });
+    test('MARKAZDAN TASHQARI ishtirokchilar alohida ro\'yxatda', () {
+      final d = TestResultDetail.fromJson({
+        'rows': [
+          {'studentId': 'st-1', 'fullName': 'Azo', 'score': 20, 'rank': 1, 'source': 'bot'},
+          // Boshqa guruh o'quvchisi — test KODI bilan qo'shilgan (member=false).
+          {
+            'studentId': 'st-9',
+            'fullName': 'Boshqa guruhdan',
+            'score': 25,
+            'rank': 1,
+            'source': 'bot',
+            'member': false,
+          },
+        ],
+        'externalRows': [
+          {
+            'id': 'ex-1',
+            'fullName': 'Tashqi Bir',
+            'phone': '998901112233',
+            'score': 24,
+            'rank': 1,
+            'answers': 'ABCD',
+            'submittedAt': '2026-08-05T10:00:00',
+          },
+          {'id': 'ex-2', 'fullName': 'Tashqi Ikki', 'score': 10, 'rank': 2},
+        ],
+      });
+      // Markazdagilar — a'zo ham, kod bilan qo'shilgan markaz o'quvchisi ham shu ro'yxatda.
+      expect(d.rows, hasLength(2));
+      expect(d.rows[0].member, isTrue);
+      expect(d.rows[1].member, isFalse);
+      // Markazdan tashqari — alohida.
+      expect(d.externalRows, hasLength(2));
+      expect(d.externalRows[0].fullName, 'Tashqi Bir');
+      expect(d.externalRows[0].phone, '998901112233');
+      expect(d.externalRows[0].score, 24.0);
+      expect(d.externalRows[1].rank, 2);
+      expect(d.externalRows[1].phone, '');
+      // submittedCount FAQAT markazdagi bot javoblarini sanaydi.
+      expect(d.submittedCount, 2);
+    });
+    test('member berilmasa — a\'zo deb olinadi (eski backend bilan moslik)', () {
+      final d = TestResultDetail.fromJson({
+        'rows': [
+          {'studentId': 'st-1'},
+        ],
+      });
+      expect(d.rows.single.member, isTrue);
     });
     test('submittedCount — faqat source="bot"', () {
       final d = TestResultDetail.fromJson({

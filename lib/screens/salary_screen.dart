@@ -109,6 +109,20 @@ class _SalaryScreenState extends State<SalaryScreen> {
           : "Qat'iy oylik";
       final months = ledger.months.reversed.toList();
 
+      // Maoshda foizli ulush bormi (o'qituvchi darajasida yoki biror guruhda) — yig'ilgan
+      // to'lov bazasi faqat shunda ma'noga ega.
+      final percentGroups =
+          (ledger.groups ?? const <GroupSalaryLine>[]).where((g) => g.mode == 'percent').toList();
+      final isPercent = ledger.salaryMode == 'percent' || percentGroups.isNotEmpty;
+      // Har guruh alohida foizga sozlangan bo'lishi mumkin (bir guruhi 40%, keyingisi 60%) —
+      // bunday holda bitta raqam yozib bo'lmaydi.
+      final rates = {for (final g in percentGroups) g.percent};
+      final percentText = rates.length == 1
+          ? '${_pct(rates.first)}%'
+          : rates.length > 1
+              ? 'guruh foizlari'
+              : '${_pct(ledger.salaryPercent ?? 0)}%';
+
       body = RefreshIndicator(
         color: c.accent,
         onRefresh: _load,
@@ -152,6 +166,21 @@ class _SalaryScreenState extends State<SalaryScreen> {
                     Expanded(child: _StatBox(label: 'Qoldi', value: fmtMoney(remaining), color: c.text)),
                   ],
                 ),
+                // FOIZLI maoshda: "Hisoblandi" qayerdan chiqqani — yig'ilgan × foiz.
+                if (isPercent && cur != null && cur.collected > 0) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration:
+                        BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(14)),
+                    child: Text(
+                      "Yig'ilgan: ${fmtMoney(cur.collected)}  ×  $percentText"
+                      '  =  ${fmtMoney(cur.baseExpected ?? cur.expected)}',
+                      style: TextStyle(fontSize: 12, color: c.muted, height: 1.4),
+                    ),
+                  ),
+                ],
                 if (cur != null) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -170,6 +199,29 @@ class _SalaryScreenState extends State<SalaryScreen> {
               ],
             ),
           ),
+          // QAYSI OYGA — eng ko'p savol tug'diradigan joy. To'lov qaysi oy UCHUN qilingan
+          // bo'lsa, o'sha oy maoshiga kiradi (to'langan kun emas).
+          if (isPercent) ...[
+            const SizedBox(height: 12),
+            SCard(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.event_available_outlined, color: c.accent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "To'lov QAYSI OY UCHUN qilingan bo'lsa, o'sha oy maoshiga kiradi — "
+                      "to'langan kun emas. Masalan 3-avgustda iyul uchun to'langan pul "
+                      'iyul maoshida ko\'rinadi.',
+                      style: TextStyle(fontSize: 12, color: c.muted, height: 1.45),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (ledger.journalLinked ?? false) ...[
             const SizedBox(height: 12),
             Container(
@@ -316,6 +368,14 @@ class _MonthRow extends StatelessWidget {
                           ],
                         ),
                       ),
+                      // Foizli maoshda: shu OY UCHUN yig'ilgan to'lov — hisob shundan chiqadi.
+                      if (month.collected > 0) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          "Shu oy uchun yig'ilgan: ${fmtMoney(month.collected)}",
+                          style: TextStyle(fontSize: 11, color: c.faint),
+                        ),
+                      ],
                       if (deduction > 0) ...[
                         const SizedBox(height: 3),
                         Text(
@@ -403,4 +463,10 @@ class _MonthRow extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Foizni chiroyli ko'rsatish: 40.0 → "40", 12.5 → "12.5".
+String _pct(num v) {
+  final d = v.toDouble();
+  return d == d.roundToDouble() ? d.toStringAsFixed(0) : d.toString();
 }

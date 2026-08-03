@@ -775,6 +775,13 @@ class MonthSalary {
   final int? missedLessons;
   final List<SalaryLessonStat>? lessons;
 
+  /// FOIZLI maosh BAZASI — shu OY UCHUN o'qituvchi guruhlaridan yig'ilgan tuition
+  /// (vozvrat ayrilgan). Qat'iy maoshda 0.
+  ///
+  /// DIQQAT: to'lov QAYSI OY UCHUN qilingan bo'lsa shu oyga kiradi — to'lov SANASI EMAS
+  /// (3-avgustda iyul uchun to'lansa → IYUL oyiga, chunki o'qituvchi iyulda dars bergan).
+  final double collected;
+
   MonthSalary({
     required this.month,
     required this.expected,
@@ -787,6 +794,7 @@ class MonthSalary {
     this.conductedLessons,
     this.missedLessons,
     this.lessons,
+    this.collected = 0,
   });
 
   factory MonthSalary.fromJson(Map<String, dynamic> j) => MonthSalary(
@@ -801,6 +809,7 @@ class MonthSalary {
         conductedLessons: _in(j['conductedLessons']),
         missedLessons: _in(j['missedLessons']),
         lessons: j['lessons'] == null ? null : _list(j['lessons'], SalaryLessonStat.fromJson),
+        collected: _d(j['collected']),
       );
 }
 
@@ -1524,6 +1533,15 @@ class OnlineTest {
   final String startAt;
   final String endAt;
 
+  /// TEST KODI — markazda o'qimaydigan odam ham botda shu kod bilan testni ishlaydi
+  /// («Testni ishlash» → «Test kodi bilan kirish» → KOD → F.I.Sh → test).
+  /// Bo'sh yuborilsa server o'zi noyob kod yaratadi.
+  final String code;
+
+  /// `true` — test guruh a'zolariga ham e'lon qilinadi (va kod bilan tashqi odam ham
+  /// qo'shiladi); `false` — "FAQAT KOD": guruhga e'lon qilinmaydi.
+  final bool groupOpen;
+
   const OnlineTest({
     this.mode = 'offline',
     this.pdfUrl = '',
@@ -1533,6 +1551,8 @@ class OnlineTest {
     this.answerKey = '',
     this.startAt = '',
     this.endAt = '',
+    this.code = '',
+    this.groupOpen = true,
   });
 
   bool get isOnline => mode == 'online';
@@ -1563,6 +1583,10 @@ class OnlineTest {
         answerKey: _s(j['answerKey']),
         startAt: _s(j['startAt']),
         endAt: _s(j['endAt']),
+        code: _s(j['code']),
+        // Eski backend `groupOpen` yubormasa — test guruhga OCHIQ deb olinadi
+        // (avvalgi xatti-harakat; aks holda testlar birdaniga yo'qolib qolardi).
+        groupOpen: j['groupOpen'] == null ? true : j['groupOpen'] == true,
       );
 
   /// `null` bo'lgan/berilmagan/buzuq `online` maydoni — oflayn test.
@@ -1579,6 +1603,8 @@ class OnlineTest {
         'answerKey': answerKey,
         'startAt': startAt,
         'endAt': endAt,
+        'code': code,
+        'groupOpen': groupOpen,
       };
 }
 
@@ -1598,6 +1624,8 @@ class GroupTest {
   final OnlineTest online;
   /// Botdan javob yuborgan o'quvchilar soni (onlayn test).
   final int submittedCount;
+  /// MARKAZDAN TASHQARI (test kodi bilan kirgan) ishtirokchilar soni.
+  final int externalCount;
 
   GroupTest({
     required this.id,
@@ -1612,6 +1640,7 @@ class GroupTest {
     required this.avgScore,
     this.online = const OnlineTest(),
     this.submittedCount = 0,
+    this.externalCount = 0,
   });
 
   factory GroupTest.fromJson(Map<String, dynamic> j) => GroupTest(
@@ -1627,6 +1656,7 @@ class GroupTest {
         avgScore: _dn(j['avgScore']),
         online: OnlineTest.parse(j['online']),
         submittedCount: _i(j['submittedCount']),
+        externalCount: _i(j['externalCount']),
       );
 }
 
@@ -1642,6 +1672,9 @@ class TestScoreRow {
   final String submittedAt;
   /// "bot" — o'quvchi botdan yubordi; "" — qo'lda kiritilgan
   final String source;
+  /// Guruhning FAOL a'zosimi. `false` — markazning BOSHQA guruhidagi o'quvchi test KODI
+  /// bilan qo'shilgan (bali bor, lekin bu guruh ro'yxatida yo'q).
+  final bool member;
 
   TestScoreRow({
     required this.studentId,
@@ -1651,6 +1684,7 @@ class TestScoreRow {
     this.answers = '',
     this.submittedAt = '',
     this.source = '',
+    this.member = true,
   });
 
   bool get fromBot => source == 'bot';
@@ -1663,6 +1697,43 @@ class TestScoreRow {
         answers: _s(j['answers']),
         submittedAt: _s(j['submittedAt']),
         source: _s(j['source']),
+        // Eski backend `member` yubormasa — a'zo deb olinadi (avvalgi xatti-harakat).
+        member: j['member'] == null ? true : j['member'] == true,
+      );
+}
+
+/// MARKAZDAN TASHQARI ishtirokchi natijasi — test KODI bilan kirgan, markazda o'qimaydigan
+/// odam. U `Student` emas, shuning uchun bali alohida jadvalda (`ExternalTestScore`) va
+/// natijalar ro'yxatida "Markazdan tashqari" bo'limida chiqadi. Web: `ExternalTestScoreRow`.
+class ExternalTestScoreRow {
+  final String id;
+  final String fullName;
+  /// Botga ulashgan telefon raqami (bo'lmasa bo'sh).
+  final String phone;
+  final double score;
+  /// Shu ro'yxat ICHIDAGI o'rin (markazdagilar bilan aralashtirilmaydi).
+  final int rank;
+  final String answers;
+  final String submittedAt;
+
+  ExternalTestScoreRow({
+    required this.id,
+    required this.fullName,
+    required this.score,
+    required this.rank,
+    this.phone = '',
+    this.answers = '',
+    this.submittedAt = '',
+  });
+
+  factory ExternalTestScoreRow.fromJson(Map<String, dynamic> j) => ExternalTestScoreRow(
+        id: _s(j['id']),
+        fullName: _s(j['fullName']),
+        phone: _s(j['phone']),
+        score: _d(j['score']),
+        rank: _i(j['rank']),
+        answers: _s(j['answers']),
+        submittedAt: _s(j['submittedAt']),
       );
 }
 
@@ -1676,9 +1747,12 @@ class TestResultDetail {
   final double maxScore;
   final String createdAt;
   final String createdBy;
+  /// MARKAZDAGILAR — guruh a'zolari + test kodi bilan qo'shilgan markaz o'quvchilari.
   final List<TestScoreRow> rows;
   /// Onlayn test sozlamalari (oflaynda mode="offline").
   final OnlineTest online;
+  /// MARKAZDAN TASHQARI — kod bilan kirgan, markazda o'qimaydigan ishtirokchilar.
+  final List<ExternalTestScoreRow> externalRows;
 
   TestResultDetail({
     required this.id,
@@ -1691,6 +1765,7 @@ class TestResultDetail {
     required this.createdBy,
     required this.rows,
     this.online = const OnlineTest(),
+    this.externalRows = const [],
   });
 
   /// Botdan javob yuborgan o'quvchilar soni.
@@ -1707,6 +1782,9 @@ class TestResultDetail {
         createdBy: _s(j['createdBy']),
         rows: _list(j['rows'], TestScoreRow.fromJson),
         online: OnlineTest.parse(j['online']),
+        externalRows: j['externalRows'] == null
+            ? const []
+            : _list(j['externalRows'], ExternalTestScoreRow.fromJson),
       );
 }
 

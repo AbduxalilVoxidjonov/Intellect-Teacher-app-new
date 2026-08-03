@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/teacher_api.dart';
@@ -27,12 +28,7 @@ class GroupTestsPanel extends StatefulWidget {
   /// Ro'yxat tepasidagi sarlavha (bo'sh bo'lsa sarlavha chiqmaydi).
   final String title;
   final String? subtitle;
-  const GroupTestsPanel({
-    super.key,
-    required this.groupId,
-    this.title = '',
-    this.subtitle,
-  });
+  const GroupTestsPanel({super.key, required this.groupId, this.title = '', this.subtitle});
 
   @override
   State<GroupTestsPanel> createState() => _GroupTestsPanelState();
@@ -87,7 +83,9 @@ class _GroupTestsPanelState extends State<GroupTestsPanel> {
 
   Future<void> _openDetail(GroupTest t) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => TestDetailScreen(testId: t.id, title: t.name)),
+      MaterialPageRoute(
+        builder: (_) => TestDetailScreen(testId: t.id, title: t.name),
+      ),
     );
     if (mounted) _load();
   }
@@ -131,13 +129,14 @@ class _GroupTestsPanelState extends State<GroupTestsPanel> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.text)),
+                    Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.text),
+                    ),
                     if (widget.subtitle != null)
-                      Text(widget.subtitle!,
-                          style: TextStyle(fontSize: 12, color: c.muted)),
+                      Text(widget.subtitle!, style: TextStyle(fontSize: 12, color: c.muted)),
                   ],
                 ),
               )
@@ -156,8 +155,14 @@ class _GroupTestsPanelState extends State<GroupTestsPanel> {
                     children: const [
                       Icon(Icons.add_rounded, size: 18, color: Colors.white),
                       SizedBox(width: 4),
-                      Text('Yangi test',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
+                      Text(
+                        'Yangi test',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -176,10 +181,7 @@ class _GroupTestsPanelState extends State<GroupTestsPanel> {
             text: "Hali test yaratilmagan.\n\"Yangi test\" tugmasi orqali qo'shing.",
           )
         else
-          for (final t in _tests) ...[
-            _testCard(c, t),
-            const SizedBox(height: 10),
-          ],
+          for (final t in _tests) ...[_testCard(c, t), const SizedBox(height: 10)],
       ],
     );
   }
@@ -217,20 +219,39 @@ class _GroupTestsPanelState extends State<GroupTestsPanel> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(t.name,
-                              maxLines: 2,
-                              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: c.text)),
+                          child: Text(
+                            t.name,
+                            maxLines: 2,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: c.text,
+                            ),
+                          ),
                         ),
                         if (online) ...[
                           const SizedBox(width: 6),
                           const SChip('ONLAYN', color: Color(0xFF7C3AED), bg: Color(0x147C3AED)),
+                          if (!t.online.groupOpen) ...[
+                            const SizedBox(width: 6),
+                            const SChip(
+                              'FAQAT KOD',
+                              color: Color(0xFFB45309),
+                              bg: Color(0x14B45309),
+                            ),
+                          ],
                         ],
                       ],
                     ),
                     const SizedBox(height: 3),
                     Text(
                       online
-                          ? '${fmtDate(t.date)} · botdan yuborgan: ${t.submittedCount}/${t.studentCount}'
+                          ? [
+                              fmtDate(t.date),
+                              'botdan yuborgan: ${t.submittedCount}/${t.studentCount}',
+                              if (t.externalCount > 0) 'markazdan tashqari: ${t.externalCount}',
+                              if (t.online.code.isNotEmpty) 'kod: ${t.online.code}',
+                            ].join(' · ')
                           : fmtDate(t.date),
                       style: TextStyle(fontSize: 11.5, color: c.muted),
                     ),
@@ -258,11 +279,15 @@ class _GroupTestsPanelState extends State<GroupTestsPanel> {
               spacing: 14,
               runSpacing: 4,
               children: [
-                Text('${t.scoredCount}/${t.studentCount} baholangan',
-                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: c.text)),
+                Text(
+                  '${t.scoredCount}/${t.studentCount} baholangan',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: c.text),
+                ),
                 if (t.avgScore != null)
-                  Text("O'rtacha: ${t.avgScore!.toStringAsFixed(1)}",
-                      style: TextStyle(fontSize: 11.5, color: c.muted)),
+                  Text(
+                    "O'rtacha: ${t.avgScore!.toStringAsFixed(1)}",
+                    style: TextStyle(fontSize: 11.5, color: c.muted),
+                  ),
                 Text('Maks: ${_num(t.maxScore)}', style: TextStyle(fontSize: 11.5, color: c.muted)),
               ],
             ),
@@ -441,9 +466,11 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
       // Noto'g'ri qiymat — eski holatga qaytaramiz va SABABINI aytamiz (U6).
       _ctrls[studentId]?.text = _fmtScore(current);
       _serverText[studentId] = _fmtScore(current);
-      _toastDetail(next == null
-          ? "Ball faqat son bo'lishi kerak"
-          : "Ball 0 dan ${_num(d.maxScore)} gacha bo'lishi kerak");
+      _toastDetail(
+        next == null
+            ? "Ball faqat son bo'lishi kerak"
+            : "Ball 0 dan ${_num(d.maxScore)} gacha bo'lishi kerak",
+      );
       return;
     }
     if (next == current) return; // o'zgarmagan
@@ -472,40 +499,136 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
       child: _loading
           ? const Center(child: Loader())
           : d == null
-              ? EmptyState(icon: Icons.error_outline_rounded, text: _error ?? 'Test topilmadi')
-              : RefreshIndicator(
-                  color: c.accent,
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-                    physics: const AlwaysScrollableScrollPhysics(),
+          ? EmptyState(icon: Icons.error_outline_rounded, text: _error ?? 'Test topilmadi')
+          : RefreshIndicator(
+              color: c.accent,
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.event_rounded, size: 15, color: c.muted),
-                          const SizedBox(width: 5),
-                          Text(fmtDate(d.date), style: TextStyle(fontSize: 12.5, color: c.muted)),
-                          const SizedBox(width: 12),
-                          Icon(Icons.star_outline_rounded, size: 15, color: c.muted),
-                          const SizedBox(width: 5),
-                          Text('Maks ${_num(d.maxScore)}', style: TextStyle(fontSize: 12.5, color: c.muted)),
-                        ],
+                      Icon(Icons.event_rounded, size: 15, color: c.muted),
+                      const SizedBox(width: 5),
+                      Text(fmtDate(d.date), style: TextStyle(fontSize: 12.5, color: c.muted)),
+                      const SizedBox(width: 12),
+                      Icon(Icons.star_outline_rounded, size: 15, color: c.muted),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Maks ${_num(d.maxScore)}',
+                        style: TextStyle(fontSize: 12.5, color: c.muted),
                       ),
-                      const SizedBox(height: 10),
-                      if (d.online.isOnline) ...[
-                        _onlineCard(c, d),
-                        const SizedBox(height: 10),
-                      ],
-                      if (d.rows.isEmpty)
-                        const EmptyState(icon: Icons.people_outline, text: "Guruhda faol o'quvchi yo'q.")
-                      else
-                        for (final r in d.rows) ...[
-                          _row(c, d, r),
-                          const SizedBox(height: 8),
-                        ],
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  if (d.online.isOnline) ...[_onlineCard(c, d), const SizedBox(height: 10)],
+                  // MARKAZDAGILAR — guruh a'zolari + test kodi bilan qo'shilgan markaz
+                  // o'quvchilari. Sarlavha faqat tashqi ishtirokchi bo'lganda ko'rinadi
+                  // (aks holda ro'yxat bitta va sarlavha ortiqcha).
+                  if (d.externalRows.isNotEmpty) ...[
+                    _sectionTitle(c, Icons.groups_outlined, 'Markazdagilar', d.rows.length),
+                    const SizedBox(height: 8),
+                  ],
+                  if (d.rows.isEmpty)
+                    const EmptyState(
+                      icon: Icons.people_outline,
+                      text: "Guruhda faol o'quvchi yo'q.",
+                    )
+                  else
+                    for (final r in d.rows) ...[_row(c, d, r), const SizedBox(height: 8)],
+                  // MARKAZDAN TASHQARI — test kodi bilan kirgan, markazda o'qimaydigan
+                  // ishtirokchilar. Ular Student emas: ball qo'lda tahrirlanmaydi.
+                  if (d.externalRows.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _sectionTitle(
+                      c,
+                      Icons.public_outlined,
+                      'Markazdan tashqari',
+                      d.externalRows.length,
+                    ),
+                    const SizedBox(height: 8),
+                    for (final r in d.externalRows) ...[
+                      _externalRow(c, d, r),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+    );
+  }
+
+  /// Natijalar ro'yxati sarlavhasi ("Markazdagilar" / "Markazdan tashqari").
+  Widget _sectionTitle(AppColors c, IconData icon, String text, int count) => Row(
+    children: [
+      Icon(icon, size: 16, color: c.faint),
+      const SizedBox(width: 6),
+      Text(
+        text,
+        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: c.muted),
+      ),
+      const SizedBox(width: 5),
+      Text('($count)', style: TextStyle(fontSize: 12, color: c.faint)),
+    ],
+  );
+
+  /// Markazdan tashqari ishtirokchi qatori — ball FAQAT botdan keladi (tahrirlanmaydi).
+  Widget _externalRow(AppColors c, TestResultDetail d, ExternalTestScoreRow r) {
+    final medal = r.rank == 1
+        ? '🥇'
+        : r.rank == 2
+        ? '🥈'
+        : r.rank == 3
+        ? '🥉'
+        : null;
+    return SCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            child: Text(
+              medal ?? '${r.rank}',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: c.muted),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  r.fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.text),
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    r.answers,
+                    _timeOf(r.submittedAt, '—'),
+                    if (r.phone.isNotEmpty) r.phone,
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: c.faint),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${_num(r.score)}/${_num(d.maxScore)}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: c.text,
+              fontFeatures: const [],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -523,8 +646,10 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
               const SChip('ONLAYN TEST', color: violet, bg: Color(0x147C3AED)),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('Savollar: ${o.questionCount} ta (A–$lastLetter)',
-                    style: TextStyle(fontSize: 12, color: c.muted)),
+                child: Text(
+                  'Savollar: ${o.questionCount} ta (A–$lastLetter)',
+                  style: TextStyle(fontSize: 12, color: c.muted),
+                ),
               ),
             ],
           ),
@@ -533,15 +658,62 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
             children: [
               Icon(Icons.schedule_rounded, size: 15, color: c.faint),
               const SizedBox(width: 5),
-              Text('${_timeOf(o.startAt, '—')}–${_timeOf(o.endAt, '—')}',
-                  style: TextStyle(fontSize: 12, color: c.muted)),
+              Text(
+                '${_timeOf(o.startAt, '—')}–${_timeOf(o.endAt, '—')}',
+                style: TextStyle(fontSize: 12, color: c.muted),
+              ),
               const SizedBox(width: 14),
               Icon(Icons.send_rounded, size: 15, color: c.faint),
               const SizedBox(width: 5),
-              Text('Botdan yuborgan: ${d.submittedCount}',
-                  style: TextStyle(fontSize: 12, color: c.muted)),
+              Text(
+                'Botdan yuborgan: ${d.submittedCount}',
+                style: TextStyle(fontSize: 12, color: c.muted),
+              ),
             ],
           ),
+          // TEST KODI — bosilsa nusxalanadi (o'qituvchi uni tashqi ishtirokchiga beradi).
+          if (o.code.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: o.code));
+                    _toastDetail('Test kodi nusxalandi: ${o.code}');
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: c.surface2,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.vpn_key_outlined, size: 14, color: c.faint),
+                        const SizedBox(width: 5),
+                        Text(
+                          o.code,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.5,
+                            color: c.text,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Icon(Icons.copy_rounded, size: 12, color: c.faint),
+                      ],
+                    ),
+                  ),
+                ),
+                if (!o.groupOpen) ...[
+                  const SizedBox(width: 8),
+                  const SChip('FAQAT KOD', color: Color(0xFFB45309), bg: Color(0x14B45309)),
+                ],
+              ],
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -552,8 +724,14 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
                     children: [
                       Icon(Icons.description_outlined, size: 16, color: c.accent),
                       const SizedBox(width: 4),
-                      Text(o.pdfName.isEmpty ? 'Savollar fayli' : o.pdfName,
-                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.accent)),
+                      Text(
+                        o.pdfName.isEmpty ? 'Savollar fayli' : o.pdfName,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: c.accent,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -562,11 +740,16 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
                 onTap: () => setState(() => _showKey = !_showKey),
                 child: Row(
                   children: [
-                    Icon(_showKey ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                        size: 16, color: c.muted),
+                    Icon(
+                      _showKey ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                      size: 16,
+                      color: c.muted,
+                    ),
                     const SizedBox(width: 4),
-                    Text('Javob kaliti',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.muted)),
+                    Text(
+                      'Javob kaliti',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.muted),
+                    ),
                   ],
                 ),
               ),
@@ -616,9 +799,11 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
               child: r.rank == 0
                   ? Text('—', style: TextStyle(color: c.faint))
                   : isTop
-                      ? Text(medals[r.rank - 1], style: const TextStyle(fontSize: 18))
-                      : Text('${r.rank}',
-                          style: TextStyle(fontWeight: FontWeight.w800, color: c.muted, fontSize: 15)),
+                  ? Text(medals[r.rank - 1], style: const TextStyle(fontSize: 18))
+                  : Text(
+                      '${r.rank}',
+                      style: TextStyle(fontWeight: FontWeight.w800, color: c.muted, fontSize: 15),
+                    ),
             ),
           ),
           const SizedBox(width: 8),
@@ -626,21 +811,26 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(r.fullName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: isTop ? FontWeight.w800 : FontWeight.w600,
-                        color: c.text)),
+                Text(
+                  r.fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isTop ? FontWeight.w800 : FontWeight.w600,
+                    color: c.text,
+                  ),
+                ),
                 if (online)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: r.fromBot
-                        ? Text('${r.answers} · ${_timeOf(r.submittedAt, '—')}',
+                        ? Text(
+                            '${r.answers} · ${_timeOf(r.submittedAt, '—')}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 10.5, color: c.faint))
+                            style: TextStyle(fontSize: 10.5, color: c.faint),
+                          )
                         : Text('— topshirmagan', style: TextStyle(fontSize: 10.5, color: c.faint)),
                   ),
               ],
@@ -649,9 +839,10 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
           const SizedBox(width: 8),
           if (_savingIds.contains(r.studentId))
             SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2.2, color: c.accent)),
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2.2, color: c.accent),
+            ),
           const SizedBox(width: 6),
           SizedBox(
             width: 64,
@@ -671,12 +862,17 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
                 filled: true,
                 fillColor: c.surface2,
                 border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: c.border)),
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: c.border),
+                ),
                 enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: c.border)),
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: c.border),
+                ),
                 focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: c.accent, width: 1.5)),
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: c.accent, width: 1.5),
+                ),
               ),
             ),
           ),
@@ -706,6 +902,10 @@ class _TestFormSheetState extends State<TestFormSheet> {
   late final TextEditingController _count;
   final TextEditingController _bulkKey = TextEditingController();
 
+  /// TEST KODI — markazda o'qimaydigan odam ham shu kod bilan botda testni ishlaydi.
+  /// Bo'sh qoldirilsa server o'zi noyob kod yaratadi.
+  late final TextEditingController _code;
+
   late DateTime _date;
   bool _online = false;
   bool _saving = false;
@@ -719,6 +919,9 @@ class _TestFormSheetState extends State<TestFormSheet> {
   List<String> _key = [];
   TimeOfDay _start = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _end = const TimeOfDay(hour: 11, minute: 0);
+
+  /// `true` — guruhga ham e'lon qilinadi; `false` — FAQAT test kodi bilan ishlanadi.
+  bool _groupOpen = true;
 
   @override
   void initState() {
@@ -738,6 +941,8 @@ class _TestFormSheetState extends State<TestFormSheet> {
     _key = o.answerKey.split('').map((ch) => ch == '-' ? '' : ch).toList();
     _start = _parseTime(o.startAt, const TimeOfDay(hour: 9, minute: 0));
     _end = _parseTime(o.endAt, const TimeOfDay(hour: 11, minute: 0));
+    _code = TextEditingController(text: o.code);
+    _groupOpen = o.groupOpen;
   }
 
   @override
@@ -746,6 +951,7 @@ class _TestFormSheetState extends State<TestFormSheet> {
     _maxScore.dispose();
     _count.dispose();
     _bulkKey.dispose();
+    _code.dispose();
     super.dispose();
   }
 
@@ -838,10 +1044,13 @@ class _TestFormSheetState extends State<TestFormSheet> {
         builder: (ctx) => AlertDialog(
           title: const Text("Oflaynga o'tkazilsinmi?"),
           content: const Text(
-              "Saqlaganingizda yuklangan savollar fayli va javoblar kaliti o'chib ketadi."),
+            "Saqlaganingizda yuklangan savollar fayli va javoblar kaliti o'chib ketadi.",
+          ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor qilish')),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Bekor qilish'),
+            ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: Text("O'tkazish", style: TextStyle(color: c.red)),
@@ -948,6 +1157,8 @@ class _TestFormSheetState extends State<TestFormSheet> {
         answerKey: _keys.join(),
         startAt: '${dateIso}T${_hhmm(_start)}',
         endAt: '${dateIso}T${_hhmm(_end)}',
+        code: _code.text.trim().toUpperCase(),
+        groupOpen: _groupOpen,
       );
       // Onlayn testda har savol — 1 ball.
       finalMax = _qCount.toDouble();
@@ -967,11 +1178,21 @@ class _TestFormSheetState extends State<TestFormSheet> {
     });
     try {
       if (widget.editing != null) {
-        await TeacherApi.updateTest(widget.editing!.id,
-            name: name, date: dateIso, maxScore: finalMax, online: online);
+        await TeacherApi.updateTest(
+          widget.editing!.id,
+          name: name,
+          date: dateIso,
+          maxScore: finalMax,
+          online: online,
+        );
       } else {
         await TeacherApi.createTest(
-            groupId: widget.groupId, name: name, date: dateIso, maxScore: finalMax, online: online);
+          groupId: widget.groupId,
+          name: name,
+          date: dateIso,
+          maxScore: finalMax,
+          online: online,
+        );
       }
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -983,21 +1204,28 @@ class _TestFormSheetState extends State<TestFormSheet> {
     }
   }
 
-  InputDecoration _dec(AppColors c, String label) => InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: c.muted),
-        filled: true,
-        fillColor: c.surface2,
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: c.border)),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: c.border)),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: c.accent, width: 1.5)),
-      );
+  InputDecoration _dec(AppColors c, String label, {String? hint}) => InputDecoration(
+    labelText: label,
+    hintText: hint,
+    hintStyle: TextStyle(color: c.faint),
+    labelStyle: TextStyle(color: c.muted),
+    filled: true,
+    fillColor: c.surface2,
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: c.border),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: c.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: c.accent, width: 1.5),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1008,7 +1236,9 @@ class _TestFormSheetState extends State<TestFormSheet> {
         constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
         decoration: BoxDecoration(
-            color: c.bg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+          color: c.bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1018,39 +1248,52 @@ class _TestFormSheetState extends State<TestFormSheet> {
                 child: Container(
                   width: 40,
                   height: 4,
-                  decoration: BoxDecoration(color: c.border, borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(
+                    color: c.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
-              Text(widget.editing != null ? 'Testni tahrirlash' : 'Yangi test',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: c.text)),
+              Text(
+                widget.editing != null ? 'Testni tahrirlash' : 'Yangi test',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: c.text),
+              ),
               const SizedBox(height: 14),
 
               // Rejim tanlash — oflayn / onlayn (bot).
               Row(
                 children: [
                   Expanded(
-                    child: _modeTile(c,
-                        icon: Icons.assignment_outlined,
-                        title: 'Oflayn',
-                        sub: "Ballni qo'lda kiritasiz",
-                        active: !_online,
-                        onTap: _switchToOffline),
+                    child: _modeTile(
+                      c,
+                      icon: Icons.assignment_outlined,
+                      title: 'Oflayn',
+                      sub: "Ballni qo'lda kiritasiz",
+                      active: !_online,
+                      onTap: _switchToOffline,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _modeTile(c,
-                        icon: Icons.smart_toy_outlined,
-                        title: 'Onlayn (bot)',
-                        sub: "O'quvchi botdan ishlaydi",
-                        active: _online,
-                        onTap: () => setState(() => _online = true)),
+                    child: _modeTile(
+                      c,
+                      icon: Icons.smart_toy_outlined,
+                      title: 'Onlayn (bot)',
+                      sub: "O'quvchi botdan ishlaydi",
+                      active: _online,
+                      onTap: () => setState(() => _online = true),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
 
-              TextField(controller: _name, style: TextStyle(color: c.text), decoration: _dec(c, 'Test nomi')),
+              TextField(
+                controller: _name,
+                style: TextStyle(color: c.text),
+                decoration: _dec(c, 'Test nomi'),
+              ),
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -1060,7 +1303,10 @@ class _TestFormSheetState extends State<TestFormSheet> {
                       onTap: _pickDate,
                       child: InputDecorator(
                         decoration: _dec(c, 'Sana'),
-                        child: Text(fmtDate(_date.toIso8601String()), style: TextStyle(color: c.text)),
+                        child: Text(
+                          fmtDate(_date.toIso8601String()),
+                          style: TextStyle(color: c.text),
+                        ),
                       ),
                     ),
                   ),
@@ -1088,6 +1334,33 @@ class _TestFormSheetState extends State<TestFormSheet> {
 
               if (_online) ...[
                 const SizedBox(height: 14),
+                _audienceField(c),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _code,
+                  textCapitalization: TextCapitalization.characters,
+                  style: TextStyle(color: c.text, fontFamily: 'monospace', letterSpacing: 2),
+                  decoration: _dec(
+                    c,
+                    'Test kodi',
+                    hint: widget.editing == null ? 'Avtomatik yaratiladi' : null,
+                  ),
+                  onChanged: (v) {
+                    final up = v.toUpperCase();
+                    if (up == v) return;
+                    _code.value = _code.value.copyWith(
+                      text: up,
+                      selection: TextSelection.collapsed(offset: up.length),
+                    );
+                  },
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  "Markazda o'qimaydigan odam ham botda «Testni ishlash» → «Test kodi bilan "
+                  "kirish» → shu kod → F.I.Sh orqali testni ishlaydi.",
+                  style: TextStyle(fontSize: 11, color: c.faint, height: 1.35),
+                ),
+                const SizedBox(height: 12),
                 _fileField(c),
                 const SizedBox(height: 12),
                 Row(
@@ -1114,7 +1387,10 @@ class _TestFormSheetState extends State<TestFormSheet> {
                             style: TextStyle(color: c.text, fontSize: 14),
                             items: [
                               for (final n in [2, 3, 4, 5, 6])
-                                DropdownMenuItem(value: n, child: Text('A–${_letters[n - 1]} ($n ta)')),
+                                DropdownMenuItem(
+                                  value: n,
+                                  child: Text('A–${_letters[n - 1]} ($n ta)'),
+                                ),
                             ],
                             onChanged: (v) {
                               if (v == null) return;
@@ -1170,13 +1446,21 @@ class _TestFormSheetState extends State<TestFormSheet> {
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: c.redSoft, borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(
+                    color: c.redSoft,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   child: Text(_error!, style: TextStyle(color: c.red, fontSize: 13)),
                 ),
               ],
               const SizedBox(height: 16),
-              SButton('Saqlash',
-                  icon: Icons.check_rounded, loading: _saving, large: true, onTap: _submit),
+              SButton(
+                'Saqlash',
+                icon: Icons.check_rounded,
+                loading: _saving,
+                large: true,
+                onTap: _submit,
+              ),
             ],
           ),
         ),
@@ -1209,15 +1493,20 @@ class _TestFormSheetState extends State<TestFormSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: active ? c.text : c.muted)),
-                  Text(sub,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 10, color: c.faint)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: active ? c.text : c.muted,
+                    ),
+                  ),
+                  Text(
+                    sub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10, color: c.faint),
+                  ),
                 ],
               ),
             ),
@@ -1227,12 +1516,102 @@ class _TestFormSheetState extends State<TestFormSheet> {
     );
   }
 
+  /// "Testni kimlar ishlaydi?" — guruhga ham e'lon qilinsinmi yoki FAQAT test kodi bilanmi.
+  /// Web'dagi `TeacherTestFormModal` bilan bir xil tanlov.
+  Widget _audienceField(AppColors c) {
+    Widget option({
+      required bool value,
+      required IconData icon,
+      required String title,
+      required String sub,
+    }) {
+      final active = _groupOpen == value;
+      return Expanded(
+        child: InkWell(
+          onTap: () => setState(() => _groupOpen = value),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: active ? c.accentSoft : c.surface2,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: active ? c.accent : c.border, width: active ? 1.5 : 1),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 18, color: active ? c.accent : c.faint),
+                const SizedBox(height: 6),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: active ? c.text : c.muted,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(sub, style: TextStyle(fontSize: 10, color: c.faint, height: 1.3)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'TESTNI KIMLAR ISHLAYDI?',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: c.faint,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        // DIQQAT: `CrossAxisAlignment.stretch` ISHLATILMAYDI — Row ichida u bolalarga
+        // CHEKSIZ balandlik beradi va "BoxConstraints forces an infinite height" bilan
+        // butun forma yiqiladi. Kartochkalar balandligi turlicha bo'lishi mumkin.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              option(
+                value: true,
+                icon: Icons.groups_outlined,
+                title: 'Guruh + kod',
+                sub: "Guruh o'quvchilarida o'zi chiqadi, tashqi odam kod bilan qo'shiladi",
+              ),
+              const SizedBox(width: 10),
+              option(
+                value: false,
+                icon: Icons.vpn_key_outlined,
+                title: 'Faqat kod bilan',
+                sub: "Guruhga e'lon qilinmaydi — faqat kodni bilgan ishlaydi",
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _fileField(AppColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('TEST SAVOLLARI (PDF / RASM)',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: c.faint, letterSpacing: 0.3)),
+        Text(
+          'TEST SAVOLLARI (PDF / RASM)',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: c.faint,
+            letterSpacing: 0.3,
+          ),
+        ),
         const SizedBox(height: 8),
         if (_pdfUrl.isNotEmpty)
           Container(
@@ -1247,10 +1626,12 @@ class _TestFormSheetState extends State<TestFormSheet> {
                 Icon(Icons.description_rounded, size: 18, color: c.red),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(_pdfName.isEmpty ? 'test.pdf' : _pdfName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.accent)),
+                  child: Text(
+                    _pdfName.isEmpty ? 'test.pdf' : _pdfName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.accent),
+                  ),
                 ),
                 GestureDetector(
                   onTap: () => setState(() {
@@ -1278,9 +1659,10 @@ class _TestFormSheetState extends State<TestFormSheet> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: c.accent)),
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: c.accent),
+                        ),
                         const SizedBox(width: 8),
                         Text('Yuklanmoqda...', style: TextStyle(fontSize: 13, color: c.muted)),
                       ],
@@ -1290,15 +1672,23 @@ class _TestFormSheetState extends State<TestFormSheet> {
                       children: [
                         Icon(Icons.upload_rounded, size: 18, color: c.muted),
                         const SizedBox(width: 8),
-                        Text("Faylni tanlang (20 MB gacha)",
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.muted)),
+                        Text(
+                          "Faylni tanlang (20 MB gacha)",
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: c.muted,
+                          ),
+                        ),
                       ],
                     ),
             ),
           ),
         const SizedBox(height: 6),
-        Text("Shu fayl o'quvchiga Telegram botda yuboriladi.",
-            style: TextStyle(fontSize: 11, color: c.faint)),
+        Text(
+          "Shu fayl o'quvchiga Telegram botda yuboriladi.",
+          style: TextStyle(fontSize: 11, color: c.faint),
+        ),
       ],
     );
   }
@@ -1312,15 +1702,24 @@ class _TestFormSheetState extends State<TestFormSheet> {
         Row(
           children: [
             Expanded(
-              child: Text("TO'G'RI JAVOBLAR KALITI",
-                  style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w800, color: c.faint, letterSpacing: 0.3)),
-            ),
-            Text('$_filled/$_qCount to\'ldirildi',
+              child: Text(
+                "TO'G'RI JAVOBLAR KALITI",
                 style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: complete ? c.green : c.amber)),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: c.faint,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+            Text(
+              '$_filled/$_qCount to\'ldirildi',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: complete ? c.green : c.amber,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -1354,7 +1753,10 @@ class _TestFormSheetState extends State<TestFormSheet> {
           child: _qCount == 0
               ? Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Text('Savollar sonini kiriting', style: TextStyle(fontSize: 12.5, color: c.faint)),
+                  child: Text(
+                    'Savollar sonini kiriting',
+                    style: TextStyle(fontSize: 12.5, color: c.faint),
+                  ),
                 )
               : ListView.separated(
                   shrinkWrap: true,
@@ -1364,9 +1766,15 @@ class _TestFormSheetState extends State<TestFormSheet> {
                     children: [
                       SizedBox(
                         width: 26,
-                        child: Text('${i + 1}.',
-                            textAlign: TextAlign.right,
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: c.faint)),
+                        child: Text(
+                          '${i + 1}.',
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: c.faint,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       for (final letter in _letters.take(_options)) ...[
@@ -1381,11 +1789,14 @@ class _TestFormSheetState extends State<TestFormSheet> {
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: keys[i] == letter ? c.accent : c.border),
                               ),
-                              child: Text(letter,
-                                  style: TextStyle(
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: keys[i] == letter ? Colors.white : c.muted)),
+                              child: Text(
+                                letter,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: keys[i] == letter ? Colors.white : c.muted,
+                                ),
+                              ),
                             ),
                           ),
                         ),
