@@ -532,33 +532,29 @@ void main() {
     });
   });
 
-  group('BUG-F6 — fmtDate diapazondan tashqari sanalarni jimgina "aylantiradi"', () {
-    // BUG-F6: lib/utils/format.dart:91 — `_parse` DateTime.tryParse ga tayanadi,
-    // u 13-oy / 31-fevralni xato deb hisoblamay, keyingi oyga o'tkazib yuboradi.
-    test('BUG-F6 pin: fmtDate("2026-13-05") → "5 Yanvar" (2027 yilga o\'tib ketdi)', () {
-      expect(fmtDate('2026-13-05'), '5 Yanvar');
-    });
-    test('BUG-F6 pin: fmtDate("2026-02-31") → "3 Mart"', () {
-      expect(fmtDate('2026-02-31'), '3 Mart');
-    });
-    test('BUG-F6 pin: 00-oy va 00-kun ham aylanadi', () {
-      expect(fmtDate('2026-00-10'), '10 Dekabr', reason: '0-oy → oldingi yil dekabri');
-      expect(fmtDate('2026-03-00'), '28 Fevral', reason: '0-kun → oldingi oy oxiri');
-    });
-    test('BUG-F6 pin: 2025-02-29 (kabisa emas) → 1 Mart', () {
-      expect(fmtDate('2025-02-29'), '1 Mart');
+  group('BUG-F6 (TUZATILDI) — fmtDate diapazondan tashqari sanani "aylantirmaydi"', () {
+    // BUG-F6: `_parse` DateTime.tryParse ga tayanardi, u 13-oy / 31-fevralni
+    // xato deb hisoblamay keyingi oyga o'tkazib yuborardi va foydalanuvchiga
+    // MUTLAQO boshqa sana ko'rinardi. Endi asl Y-M-D bilan solishtiriladi.
+    // Eski "pin"lar (5 Yanvar / 3 Mart / 10 Dekabr / 1 Mart) O'CHIRILDI.
+    test('BUG-F6 shartnoma: yaroqsiz sana xom satr sifatida qaytadi', () {
+      expect(fmtDate('2026-13-05'), '2026-13-05');
+      expect(fmtDate('2026-02-31'), '2026-02-31');
+      expect(fmtDate('2026-00-10'), '2026-00-10');
+      expect(fmtDate('2026-03-00'), '2026-03-00');
+      expect(fmtDate('2025-02-29'), '2025-02-29');
     });
 
-    test(
-      'BUG-F6 shartnoma: yaroqsiz sana xom satr sifatida qaytishi kerak',
-      () {
-        expect(fmtDate('2026-13-05'), '2026-13-05');
-        expect(fmtDate('2026-02-31'), '2026-02-31');
-        expect(fmtDate('2026-00-10'), '2026-00-10');
-        expect(fmtDate('2025-02-29'), '2025-02-29');
-      },
-      skip: 'BUG-F6 — hozircha noto\'g\'ri ishlaydi',
-    );
+    test('BUG-F6: to\'g\'ri sanalar avvalgidek ishlaydi', () {
+      expect(fmtDate('2024-02-29'), '29 Fevral', reason: 'kabisa yili');
+      expect(fmtDate('2026-12-31'), '31 Dekabr');
+      expect(fmtDate('2026-01-01'), '1 Yanvar');
+    });
+
+    test('BUG-F6: vaqtli satrda ham sana qismi tekshiriladi', () {
+      expect(fmtDate('2026-02-31T09:00:00'), '2026-02-31T09:00:00');
+      expect(fmtTime('2026-02-31T09:00:00'), '');
+    });
   });
 
   group('BUG-F8 — fmtDate hech qachon yilni ko\'rsatmaydi', () {
@@ -660,8 +656,14 @@ void main() {
       expect(fmtTime('2026-03-12T09:05:00').length, 5);
     });
 
-    test('faqat sana berilsa "00:00"', () {
-      expect(fmtTime('2026-03-12'), '00:00');
+    // TUZATILDI: faqat sana kelganda vaqt umuman noma'lum — "00:00" ko'rsatish
+    // chalg'itardi (soati noma'lum dars yarim tunda bo'lib ko'rinardi).
+    // O'quvchi ilovasidagi qorovul bilan aynan bir xil.
+    test('faqat sana berilsa bo\'sh satr (avval "00:00" edi)', () {
+      expect(fmtTime('2026-03-12'), '');
+      expect(fmtTime('  2026-03-12  '), '');
+      // Haqiqiy yarim tunli VAQT esa avvalgidek ko'rsatiladi:
+      expect(fmtTime('2026-03-12T00:00:00'), '00:00');
     });
 
     test('null / bo\'sh / probelli → bo\'sh satr', () {
@@ -681,59 +683,37 @@ void main() {
     });
   });
 
-  group('BUG-F5 — _parse .toLocal() ni chaqirmaydi (UTC ko\'rsatiladi)', () {
-    // BUG-F5: lib/utils/format.dart:91 — `DateTime.tryParse` "Z"/offsetli satr uchun
-    // UTC DateTime qaytaradi, u `.toLocal()` qilinmaydi. Natijada foydalanuvchi
-    // mahalliy vaqt o'rniga UTC ni ko'radi.
+  group('BUG-F5 (TUZATILDI) — _parse .toLocal() ni chaqiradi', () {
+    // BUG-F5: `DateTime.tryParse` "Z"/ofsetli satr uchun UTC DateTime qaytaradi,
+    // u `.toLocal()` qilinmasdi va foydalanuvchi mahalliy vaqt o'rniga UTC ni
+    // ko'rardi. Eski "pin"lar (09:00 UTC qotirilgan) O'CHIRILDI.
+    //
+    // ESLATMA: hozirgi backend sanalarni ofsetsiz (Toshkent mahalliy vaqti)
+    // yuboradi — `AppClock.Iso()` → "yyyy-MM-ddTHH:mm:ss". Shuning uchun real
+    // ma'lumot uchun `toLocal()` no-op, bu testlar esa kelajakda "Z" kelib
+    // qolsa himoya bo'lib turadi.
     const isoZ = '2026-03-12T09:00:00Z';
     const isoLateZ = '2026-03-12T23:30:00Z';
 
-    test('BUG-F5 pin: fmtTime("...09:00:00Z") har qanday mintaqada "09:00" (UTC)', () {
-      expect(fmtTime(isoZ), '09:00');
-      expect(DateTime.parse(isoZ).isUtc, isTrue);
-    });
-
-    test('BUG-F5 pin: chiqish mahalliy vaqtga MOS EMAS (offset != 0 bo\'lganda)', () {
+    test('BUG-F5 shartnoma: UTC belgili vaqt mahalliy vaqtga o\'giriladi', () {
       final local = DateTime.parse(isoZ).toLocal();
       final localStr = '${local.hour.toString().padLeft(2, '0')}:'
           '${local.minute.toString().padLeft(2, '0')}';
-      if (DateTime.now().timeZoneOffset != Duration.zero) {
-        expect(fmtTime(isoZ), isNot(localStr),
-            reason: 'UTC CI bo\'lmagan mashinada mahalliy vaqt farq qilishi kerak edi');
-      }
-      // UTC mashinada ham pin barqaror:
-      expect(fmtTime(isoZ), '09:00');
+      expect(fmtTime(isoZ), localStr);
+
+      final localD = DateTime.parse(isoLateZ).toLocal();
+      expect(fmtDate(isoLateZ), '${localD.day} ${monthsUz[localD.month - 1]}');
     });
 
-    test('BUG-F5 pin: fmtDate kech kechqurungi UTC belgisida ham UTC kunini beradi', () {
-      expect(fmtDate(isoLateZ), '12 Mart');
-      final local = DateTime.parse(isoLateZ).toLocal();
-      final localStr = '${local.day} ${monthsUz[local.month - 1]}';
-      if (DateTime.now().timeZoneOffset != Duration.zero && local.day != 12) {
-        expect(fmtDate(isoLateZ), isNot(localStr),
-            reason: 'mahalliy kun 12-martdan farq qilsa, chiqish ham farq qilishi kerak edi');
-      }
-    });
-
-    test('BUG-F5 pin: aniq offsetli satr ham konvertatsiya qilinmaydi', () {
-      // "+05:00" berilgan → mahalliy mintaqadan qat\'i nazar UTC ga keltirilib ko'rsatiladi.
-      expect(fmtTime('2026-03-12T14:00:00+05:00'), '09:00');
+    test('BUG-F5: aniq ofsetli satr ham mahalliy vaqtga o\'giriladi', () {
+      // "+05:00" va "Z" bir xil lahzani bildiradi → chiqish ham bir xil.
       expect(fmtTime('2026-03-12T14:00:00+05:00'), fmtTime(isoZ));
     });
 
-    test(
-      'BUG-F5 shartnoma: UTC belgili vaqt mahalliy vaqtga o\'girilishi kerak',
-      () {
-        final local = DateTime.parse(isoZ).toLocal();
-        final localStr = '${local.hour.toString().padLeft(2, '0')}:'
-            '${local.minute.toString().padLeft(2, '0')}';
-        expect(fmtTime(isoZ), localStr);
-
-        final localD = DateTime.parse(isoLateZ).toLocal();
-        expect(fmtDate(isoLateZ), '${localD.day} ${monthsUz[localD.month - 1]}');
-      },
-      skip: 'BUG-F5 — hozircha noto\'g\'ri ishlaydi',
-    );
+    test('BUG-F5: ofsetsiz satr (backendning haqiqiy formati) o\'zgarmaydi', () {
+      expect(fmtTime('2026-03-12T09:00:00'), '09:00');
+      expect(fmtDate('2026-03-12T23:30:00'), '12 Mart');
+    });
   });
 
   // ---------------------------------------------------------------------------

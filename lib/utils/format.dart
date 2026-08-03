@@ -113,10 +113,31 @@ String fmtMoney(num n, {bool withSign = false}) {
   return '$sign$buf';
 }
 
+/// Faqat sana ("2026-03-12") shaklidagi kirishning boshidagi yil-oy-kun.
+final _ymdRe = RegExp(r'^(\d{4})-(\d{2})-(\d{2})');
+
 DateTime? _parse(String? iso) {
   if (iso == null || iso.trim().isEmpty) return null;
   final s = iso.trim();
-  return DateTime.tryParse(s.length <= 10 ? '${s}T00:00:00' : s);
+  final d = DateTime.tryParse(s.length <= 10 ? '${s}T00:00:00' : s);
+  if (d == null) return null;
+  // TUZATILDI (BUG-F6): `DateTime.parse` diapazondan chiqqan qiymatlarni
+  // jimgina "tuzatadi" ("2026-02-31" → 3-mart, "2026-00-10" → oldingi yil
+  // dekabri, "2025-02-29" → 1-mart). Foydalanuvchiga MUTLAQO boshqa sana
+  // ko'rsatilmasligi uchun asl matndagi Y-M-D bilan solishtiramiz.
+  final m = _ymdRe.firstMatch(s);
+  if (m != null) {
+    final y = int.parse(m.group(1)!);
+    final mo = int.parse(m.group(2)!);
+    final dd = int.parse(m.group(3)!);
+    final chk = DateTime.utc(y, mo, dd);
+    if (chk.year != y || chk.month != mo || chk.day != dd) return null;
+  }
+  // TUZATILDI (BUG-F5): UTC ("...Z") yoki ofsetli satr mahalliy vaqtga
+  // o'girilmasa soat noto'g'ri ko'rinadi. Hozirgi backend sanalarni ofsetsiz
+  // (Toshkent mahalliy vaqti) yuborgani uchun bu no-op, lekin kelajakda "Z"
+  // kelib qolsa himoya bo'ladi. O'quvchi ilovasidagi mantiq bilan AYNAN bir xil.
+  return d.toLocal();
 }
 
 /// "12 Mart" yoki weekday=true bo'lsa "12 Mart, Dushanba".
@@ -143,6 +164,9 @@ String fmtMonth(String? ym) {
 
 /// "HH:mm".
 String fmtTime(String? iso) {
+  // Faqat sana kelgan bo'lsa vaqt umuman yo'q — "00:00" ko'rsatish chalg'itadi
+  // (jadvalda soati noma'lum dars yarim tunda bo'lib ko'rinardi).
+  if ((iso?.trim().length ?? 0) <= 10) return '';
   final d = _parse(iso);
   if (d == null) return '';
   return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';

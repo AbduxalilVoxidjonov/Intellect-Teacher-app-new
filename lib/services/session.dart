@@ -58,6 +58,14 @@ class Session extends ChangeNotifier {
     ApiClient.onUnauthorized = _onUnauthorized;
     _ready = true;
     notifyListeners();
+    // Saqlangan sessiyani ham `login()` dagi kabi QAT'IY tekshiramiz.
+    // Bunsiz eski (fail-open) versiyada rolsiz/boshqa rolli kirgan
+    // foydalanuvchi ilovani qayta ochganda tekshiruvsiz ichkarida qolaverardi.
+    // Rolni aniqlab bo'lmasa (user buzuq/yo'q) ham sessiya bekor qilinadi.
+    if (_token != null) {
+      final role = _user?['role']?.toString().trim().toLowerCase();
+      if (role != 'teacher') await logout();
+    }
   }
 
   /// Kalitlari String bo'lgan map — `jsonDecode` odatda shuni beradi, lekin
@@ -97,11 +105,16 @@ class Session extends ChangeNotifier {
       final token = data['token'];
       if (token is! String || token.isEmpty) return "Server javobi noto'g'ri";
       final user = _asUser(data['user']);
-      // Faqat o'qituvchi rolini bu ilovaga kiritamiz.
-      // Rol umuman kelmasa kiritamiz (ba'zi backend javoblarida `role` yo'q) —
-      // haqiqiy himoya baribir serverdagi `[Authorize(Roles=...)]`.
-      final role = user?['role'];
-      if (role != null && role.toString() != 'teacher') {
+      // Faqat o'qituvchi rolini bu ilovaga kiritamiz — QAT'IY (fail-closed).
+      // Backend `user.role` ni HAR DOIM to'la qaytaradi (`UserDto.Role`
+      // non-nullable, DB ustuni NOT NULL) va qiymat kichik harfda bo'ladi:
+      // teacher/student/admin/superadmin/staff. OTP orqali kirish ham aynan
+      // shu shaklni beradi. Demak rol kelmasa — bu kutilmagan/buzuq javob,
+      // shuning uchun eski "rol kelmasa ham kiritamiz" (fail-open) yondashuvi
+      // olib tashlandi: o'quvchi/admin hisobi bilan o'qituvchi ilovasiga
+      // kirib qolish imkoni yopiladi.
+      final role = user?['role']?.toString().trim().toLowerCase();
+      if (role != 'teacher') {
         return "Bu ilova faqat o'qituvchilar uchun";
       }
       await _persist(token, user);

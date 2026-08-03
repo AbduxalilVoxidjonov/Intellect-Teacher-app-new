@@ -24,8 +24,6 @@ import 'package:teacher/services/session.dart';
 
 import 'helpers/fake_api.dart';
 
-const _kBug = "hozircha noto'g'ri ishlaydi";
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -80,7 +78,10 @@ void main() {
     });
 
     test('ApiClient.token va onUnauthorized ulanadi', () async {
-      SharedPreferences.setMockInitialValues(<String, Object>{'token': 'TOK'});
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'token': 'TOK',
+        'user': jsonEncode({'id': 'u1', 'role': 'teacher'}),
+      });
       final s = Session();
       await s.init();
       expect(ApiClient.token, 'TOK');
@@ -102,7 +103,7 @@ void main() {
       expect(n, 1);
     });
 
-    test('buzuq JSON — try/catch yutadi, user null qoladi', () async {
+    test('buzuq JSON — try/catch yutadi, sessiya esa bekor qilinadi', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'token': 'TOK',
         'user': '{bu json emas',
@@ -110,10 +111,13 @@ void main() {
       final s = Session();
       await s.init(); // otmasligi kerak
       expect(s.user, isNull);
-      expect(s.token, 'TOK');
       expect(s.ready, isTrue);
       expect(s.fullName, '');
       expect(s.teacherId, isNull);
+      // BUG-A6 (fail-closed): rolni tasdiqlab bo'lmadi — tokenni saqlab
+      // qolmaymiz, foydalanuvchi qaytadan kirsin.
+      expect(s.token, isNull);
+      expect(s.isAuthed, isFalse);
     });
 
     test('user JSON massiv — cast xatosi ham yutiladi', () async {
@@ -226,7 +230,12 @@ void main() {
     });
 
     test('tema token/user\'ga tegmaydi', () async {
-      SharedPreferences.setMockInitialValues(<String, Object>{'token': 'TOK'});
+      // `init()` endi rolni tekshiradi — sessiya bekor bo'lib ketmasligi uchun
+      // saqlangan user o'qituvchi bo'lishi shart.
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'token': 'TOK',
+        'user': jsonEncode({'id': 'u1', 'role': 'teacher'}),
+      });
       final s = Session();
       await s.init();
       await s.setDark(true);
@@ -296,15 +305,19 @@ void main() {
       expect(n, 1);
     });
 
-    test('user null bo\'lsa xotiraga faqat token yoziladi', () async {
+    // BUG-A6 (fail-closed): avval bu yerda "user null bo'lsa xotiraga faqat
+    // token yoziladi" testi turardi. `user`siz javob endi RAD etilgani uchun
+    // u ssenariy umuman yuzaga kelmaydi — test yangi xulqqa moslandi.
+    test('user\'siz javobda xotiraga HECH NARSA yozilmaydi', () async {
       final s = Session();
       await s.init();
       fake.enqueueJson({'token': 'T1'});
-      expect(await s.login('a@b.c', 'p'), isNull);
+      expect(await s.login('a@b.c', 'p'), "Bu ilova faqat o'qituvchilar uchun");
       final p = await prefs();
-      expect(p.getString('token'), 'T1');
+      expect(p.getString('token'), isNull);
       expect(p.getString('user'), isNull);
       expect(s.user, isNull);
+      expect(s.isAuthed, isFalse);
     });
   });
 
@@ -476,43 +489,12 @@ void main() {
       expect(s.isAuthed, isTrue);
     });
 
-    // BUG-A6: session.dart:57-60 roldan qorovul "fail-open" —
-    // `role` null bo'lsa (yoki `user` umuman kelmasa) kirish RUXSAT etiladi.
-    // ATAYLAB o'zgartirilmadi: `role` yubormaydigan backend javoblarida
-    // o'qituvchilarni ilovadan qulflab qo'yish xavfli deb topildi; haqiqiy
-    // himoya baribir serverdagi `[Authorize(Roles=...)]`.
-    test('BUG-A6: user\'da role yo\'q — kirish QABUL qilinadi', () async {
-      final s = Session();
-      await s.init();
-      fake.enqueueJson({
-        'token': 'T1',
-        'user': {'id': 'u1', 'fullName': 'Ali'}
-      });
-      expect(await s.login('a@b.c', 'p'), isNull);
-      expect(s.isAuthed, isTrue);
-      expect(ApiClient.token, 'T1');
-    });
-
-    test('BUG-A6: user umuman yo\'q — kirish QABUL qilinadi', () async {
-      final s = Session();
-      await s.init();
-      fake.enqueueJson({'token': 'T1'});
-      expect(await s.login('a@b.c', 'p'), isNull);
-      expect(s.isAuthed, isTrue);
-    });
-
-    test('BUG-A6: role null — kirish QABUL qilinadi', () async {
-      final s = Session();
-      await s.init();
-      fake.enqueueJson({
-        'token': 'T1',
-        'user': {'role': null}
-      });
-      expect(await s.login('a@b.c', 'p'), isNull);
-      expect(s.isAuthed, isTrue);
-    });
-
-    test('BUG-A6 (kutilgan): rolsiz javob RAD etilishi kerak', () async {
+    // BUG-A6 (TUZATILDI): roldan qorovul endi "fail-closed".
+    // Backend `user.role` ni HAR DOIM to'la qaytaradi (`UserDto.Role`
+    // non-nullable, DB ustuni NOT NULL, qiymat kichik harfda). Demak rol
+    // kelmasa — javob buzuq, kiritmaymiz. Eski "fail-open" pinlari
+    // (rolsiz/null rolda kirish QABUL qilinardi) O'CHIRILDI.
+    test('BUG-A6 shartnoma: rolsiz javob RAD etiladi', () async {
       final s = Session();
       await s.init();
       fake.enqueueJson({
@@ -521,7 +503,64 @@ void main() {
       });
       expect(await s.login('a@b.c', 'p'), "Bu ilova faqat o'qituvchilar uchun");
       expect(s.isAuthed, isFalse);
-    }, skip: 'BUG-A6 — $_kBug');
+      expect(ApiClient.token, isNull);
+    });
+
+    test('BUG-A6 shartnoma: user umuman yo\'q — RAD etiladi', () async {
+      final s = Session();
+      await s.init();
+      fake.enqueueJson({'token': 'T1'});
+      expect(await s.login('a@b.c', 'p'), "Bu ilova faqat o'qituvchilar uchun");
+      expect(s.isAuthed, isFalse);
+    });
+
+    test('BUG-A6 shartnoma: role null — RAD etiladi', () async {
+      final s = Session();
+      await s.init();
+      fake.enqueueJson({
+        'token': 'T1',
+        'user': {'role': null}
+      });
+      expect(await s.login('a@b.c', 'p'), "Bu ilova faqat o'qituvchilar uchun");
+      expect(s.isAuthed, isFalse);
+    });
+
+    test('BUG-A6: rol atrofidagi probel va katta harf e\'tiborga olinmaydi', () async {
+      final s = Session();
+      await s.init();
+      fake.enqueueJson({
+        'token': 'T1',
+        'user': {'id': 'u1', 'role': '  Teacher '}
+      });
+      expect(await s.login('a@b.c', 'p'), isNull);
+      expect(s.isAuthed, isTrue);
+    });
+
+    test('BUG-A6: init() saqlangan o\'qituvchi bo\'lmagan sessiyani bekor qiladi',
+        () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'token': 'TOK',
+        'user': jsonEncode({'id': 'u1', 'role': 'student'}),
+      });
+      final s = Session();
+      await s.init();
+      expect(s.isAuthed, isFalse);
+      expect(s.token, isNull);
+      expect(s.user, isNull);
+      expect(ApiClient.token, isNull);
+    });
+
+    test('BUG-A6: init() saqlangan o\'qituvchi sessiyasini saqlab qoladi', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'token': 'TOK',
+        'user': jsonEncode({'id': 'u1', 'role': 'teacher'}),
+      });
+      final s = Session();
+      await s.init();
+      expect(s.isAuthed, isTrue);
+      expect(s.token, 'TOK');
+      expect(ApiClient.token, 'TOK');
+    });
 
     // BUG-A6 ning tur xavfsizligi QISMI tuzatildi: rol String bo'lmasa avval
     // `role as String?` cast'i TypeError berardi, endi `toString()` bilan
@@ -538,12 +577,13 @@ void main() {
       expect(ApiClient.token, isNull);
     });
 
-    test('BUG-A6 (TUZATILDI): user Map bo\'lmasa ham yiqitmaydi', () async {
+    test('BUG-A6 (TUZATILDI): user Map bo\'lmasa yiqitmaydi, RAD etiladi', () async {
       final s = Session();
       await s.init();
       fake.enqueueJson({'token': 'T1', 'user': 'ali'});
-      expect(await s.login('a@b.c', 'p'), isNull);
-      expect(s.isAuthed, isTrue);
+      // `_asUser` null qaytaradi → rolni aniqlab bo'lmaydi → fail-closed.
+      expect(await s.login('a@b.c', 'p'), "Bu ilova faqat o'qituvchilar uchun");
+      expect(s.isAuthed, isFalse);
       expect(s.user, isNull);
     });
   });
