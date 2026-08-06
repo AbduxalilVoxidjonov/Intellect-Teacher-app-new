@@ -41,7 +41,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
     try {
       // TUZATILDI (P2): 7 endpoint KETMA-KET yuklanardi (~2 s bo'sh spinner).
-      // Endi barchasi parallel (`assignments_screen.dart:54` dagi namuna).
+      // Endi barchasi parallel (`Future.wait`).
       // Majburiylari xato bersa butun yuklash xato hisoblanadi, ixtiyoriylari
       // (maosh/reyting/markaz) `null` bo'lib o'tadi — avvalgi xatti-harakat.
       final profileF = TeacherApi.profile();

@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../api/teacher_api.dart';
-import '../config.dart';
 import '../models/models.dart';
 import '../services/file_pick.dart';
+import '../services/uploads.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/sub_scaffold.dart';
@@ -774,15 +773,13 @@ class _TestDetailScreenState extends State<TestDetailScreen> {
     );
   }
 
+  /// Savollar faylini ochish. `/uploads` login talab qilgani uchun (backend
+  /// commit `52eda96`) fayl AVVAL token bilan yuklab olinadi — tizim brauzeriga
+  /// manzilni berish endi 404 bilan tugaydi.
+  /// Xato bo'lsa JIMGINA qolmaydi (N5).
   Future<void> _openFile(String url) async {
-    final full = url.startsWith('http') ? url : '$kFileBaseUrl$url';
-    try {
-      // `launchUrl` `false` qaytarsa fayl OCHILMAGAN — jimgina qolib ketmasin (N5).
-      final ok = await launchUrl(Uri.parse(full), mode: LaunchMode.externalApplication);
-      if (!ok) _toastDetail("Faylni ochib bo'lmadi");
-    } catch (_) {
-      _toastDetail("Faylni ochib bo'lmadi");
-    }
+    final error = await Uploads.openExternally(url);
+    if (error != null) _toastDetail(error);
   }
 
   Widget _row(AppColors c, TestResultDetail d, TestScoreRow r) {

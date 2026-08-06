@@ -9,9 +9,12 @@ import 'tabs/profile_screen.dart';
 
 /// Asosiy qobiq — pastki 5-tab navigatsiya (web `TeacherMobileLayout`ga mos, teal).
 ///
-/// DIQQAT: «Jurnal» tabi ATAYLAB olib tashlangan — jurnalga Dashboard'dagi guruh
-/// kartasini bosib kiriladi (guruh sahifasi = jurnal + davomat + baholash + reyting +
-/// imtihonlar). Uning o'rniga «Testlar» bo'limi qo'yilgan.
+/// TARTIB (qat'iy): Bosh · Test · Reyting · Suhbat · Profil.
+///
+/// DIQQAT: «Jurnal» tabi ATAYLAB olib tashlangan — jurnalga Bosh sahifadagi guruh
+/// kartasini bosib kiriladi (`DashboardScreen` → `GroupDetailScreen`: jurnal +
+/// davomat + baholash + reyting + imtihonlar + aloqa). «Topshiriqlar» tabi esa
+/// backendda modul butunlay o'chirilgani uchun (CRM commit a3ea522) yo'q.
 class ShellScreen extends StatefulWidget {
   const ShellScreen({super.key});
   @override
@@ -35,8 +38,8 @@ class _ShellScreenState extends State<ShellScreen> {
 
   late final List<Widget> _screens = [
     const DashboardScreen(),
-    const RatingScreen(showBack: false),
     const TestsScreen(),
+    const RatingScreen(showBack: false),
     MessagesScreen(key: _messagesKey),
     const ProfileScreen(),
   ];
@@ -90,10 +93,11 @@ class _ShellScreenState extends State<ShellScreen> {
     );
   }
 
+  /// Tartib `_screens` bilan AYNAN mos bo'lishi shart — indeks ikkalasida bitta.
   static const _tabs = [
-    _TabDef(Icons.home_rounded, Icons.home_outlined, 'Dashboard'),
+    _TabDef(Icons.home_rounded, Icons.home_outlined, 'Bosh'),
+    _TabDef(Icons.fact_check_rounded, Icons.fact_check_outlined, 'Test'),
     _TabDef(Icons.emoji_events_rounded, Icons.emoji_events_outlined, 'Reyting'),
-    _TabDef(Icons.assignment_turned_in_rounded, Icons.assignment_turned_in_outlined, 'Testlar'),
     _TabDef(Icons.chat_bubble_rounded, Icons.chat_bubble_outline, 'Suhbat'),
     _TabDef(Icons.person_rounded, Icons.person_outline, 'Profil'),
   ];

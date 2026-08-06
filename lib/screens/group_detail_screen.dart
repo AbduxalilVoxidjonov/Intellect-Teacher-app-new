@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
+import 'group_contact_tab.dart';
 import 'group_grading_section.dart';
 import 'group_rating_tab.dart';
 import 'group_tests_panel.dart';
@@ -16,8 +17,7 @@ import 'group_tests_panel.dart';
 const _weekdayShort = ['Du', 'Se', 'Cho', 'Pa', 'Ju', 'Sha', 'Ya'];
 
 /// Guruh sahifasi — web `TeacherGroupDetailPage.tsx` bilan BIR XIL to'liq to'plam:
-/// guruh ma'lumoti + 5 tab (Jurnal, Davomat, Baholash, Reyting, Imtihonlar) va pastda
-/// yig'iladigan «O'quv dasturi» bo'limi.
+/// guruh ma'lumoti + 6 tab (Jurnal, Davomat, Baholash, Reyting, Imtihonlar, Aloqa).
 ///
 /// Bu sahifaga Dashboard'dagi guruh kartasidan kiriladi (pastki navigatsiyada alohida
 /// «Jurnal» tabi YO'Q).
@@ -31,7 +31,7 @@ class GroupDetailScreen extends StatefulWidget {
 }
 
 /// Guruh sahifasidagi ko'rinishlar (web `groupView`).
-enum _GroupView { jurnal, davomat, baholash, reyting, imtihonlar }
+enum _GroupView { jurnal, davomat, baholash, reyting, imtihonlar, aloqa }
 
 /// Jurnal qatori — o'quvchi + hisoblangan yig'indilar (saralash uchun).
 class _ScoredStudent {
@@ -423,10 +423,21 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 groupId: widget.groupId,
                 title: 'Imtihonlar (testlar)',
               ),
+            // «Aloqa» — o'quvchini "Bog'lanish kerak" navbatiga yuborish.
+            // DIQQAT: jurnal ro'yxati TO'LIQ beriladi (muzlatilganlar bilan) —
+            // ularni chiqarib tashlash qoidasi komponent ICHIDA, chunki u admin
+            // jurnalida ham AYNI shunday bo'lishi kerak (web bilan bir xil).
+            _GroupView.aloqa => GroupContactTab(
+                students: journal.students,
+                loadReasons: TeacherApi.contactReasons,
+                onSend: (ids, reasonId, note) => TeacherApi.sendToContactQueue(
+                  widget.groupId,
+                  ids,
+                  reasonId,
+                  note,
+                ),
+              ),
           },
-          // DIQQAT: web'da bu yerda «O'quv dasturi» bo'limi ham bor, lekin ilovada u
-          // ATAYLAB ko'rsatilmaydi (jurnal sahifasi yengil qolsin) — o'quv dasturi
-          // Profil → «O'quv dasturi» bo'limida ochiladi.
         ],
       ),
     );
@@ -440,6 +451,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       (_GroupView.baholash, 'Baholash'),
       (_GroupView.reyting, 'Reyting'),
       (_GroupView.imtihonlar, 'Imtihonlar'),
+      (_GroupView.aloqa, 'Aloqa'),
     ];
     return Container(
       padding: const EdgeInsets.all(4),
@@ -787,8 +799,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                         // web bilan bir xil (`balanceColor`, app_theme.dart).
                         // MUHIM: balans ham, qarz oylari ham SHU GURUH bo'yicha (boshqa
                         // guruhdagi qarz bu yerni bo'yamaydi).
-                        child: Text(
-                          students[i].student.fullName,
+                        child: _StudentNameButton(
+                          student: students[i].student,
                           style: nameStyle.copyWith(
                             color: balanceColor(
                               c,
@@ -1146,8 +1158,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: c.muted)),
           ),
           Expanded(
-            child: Text(
-              st.fullName,
+            child: _StudentNameButton(
+              student: st,
               maxLines: 2,
               // Web bilan bir xil: 2+ oylik qarz binafsha-pushti, qarzdor qizil,
               // to'lagan yashil (hammasi SHU GURUH bo'yicha).
@@ -1186,6 +1198,45 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// O'QUVCHI F.I.SH — BOSILADIGAN (jurnal va davomat tablarida bir xil).
+///
+/// Bosilganda o'quvchining surati oynada ochiladi (web `PhotoViewerModal` bilan
+/// bir xil) — o'qituvchi o'quvchini yuzidan taniy olishi uchun. Surati BOR
+/// o'quvchida ism yonida kichik ikonka turadi, ya'ni qayerda rasm borligi
+/// ko'rinib turadi; surati yo'q bo'lsa ham oyna ochiladi va "Rasm yuklanmagan"
+/// deb aytadi (jimgina hech nima bo'lmasligi chalg'itardi).
+class _StudentNameButton extends StatelessWidget {
+  final GroupJournalStudent student;
+  final TextStyle style;
+  final int? maxLines;
+  const _StudentNameButton({required this.student, required this.style, this.maxLines});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    final hasPhoto = student.photoUrl.isNotEmpty;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showPhotoViewer(
+        context,
+        name: student.fullName,
+        photoUrl: student.photoUrl,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Flexible(child: Text(student.fullName, maxLines: maxLines, style: style)),
+          if (hasPhoto) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.image_outlined, size: 13, color: c.faint),
+          ],
         ],
       ),
     );

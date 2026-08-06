@@ -1,30 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../api/api_client.dart';
 import '../api/teacher_api.dart';
-import '../config.dart';
 import '../models/models.dart';
+import '../services/uploads.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
-
-/// Nisbiy fayl manzilini baza URL ustiga TO'G'RI ulaydi.
-///
-/// TUZATILDI (P2): avval satr qo'shish ishlatilardi — server "uploads/x.pdf"
-/// (boshida "/" siz) qaytarsa "https://hostuploads/x.pdf" hosil bo'lardi.
-Uri? resolveFileUrl(String url) {
-  final t = url.trim();
-  if (t.isEmpty) return null;
-  if (t.startsWith('http')) return Uri.tryParse(t);
-  final base = Uri.tryParse(kFileBaseUrl);
-  if (base == null) return null;
-  try {
-    return base.resolve(t);
-  } catch (_) {
-    return null;
-  }
-}
 
 /// Shartnoma — o'qituvchi bilan tuzilgan shartnomalarning elektron (PDF) nusxalari.
 /// Backend: `GET /teacher/contracts` — faqat superadmin PDF yuklagan shartnomalar keladi,
@@ -61,21 +43,14 @@ class _ContractsScreenState extends State<ContractsScreen> {
     }
   }
 
-  /// Faylni tashqi ilovada ochish (guruh testlaridagi bilan bir xil uslub).
+  /// Faylni ochish (guruh testlaridagi bilan bir xil uslub).
+  ///
+  /// `/uploads` endi login talab qiladi (`uploads-security.md`) — tizim
+  /// brauzerida token yo'q, shuning uchun fayl AVVAL token bilan yuklab
+  /// olinadi (`Uploads.openExternally`), keyin qurilma ilovasida ochiladi.
   Future<void> _openFile(String url) async {
-    final uri = resolveFileUrl(url);
-    if (uri == null) {
-      _toast("Fayl manzili noto'g'ri");
-      return;
-    }
-    try {
-      // TUZATILDI (P2): `launchUrl` natijasi e'tiborsiz qoldirilardi — hech
-      // qanday ilova topilmasa foydalanuvchi uchun JIMGINA hech nima bo'lmasdi.
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!ok) _toast("Faylni ochib bo'lmadi");
-    } catch (_) {
-      _toast("Faylni ochib bo'lmadi");
-    }
+    final error = await Uploads.openExternally(url);
+    if (error != null) _toast(error);
   }
 
   void _toast(String msg) {

@@ -12,11 +12,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:teacher/api/api_client.dart';
 import 'package:teacher/config.dart';
-import 'package:teacher/screens/assignment_detail_screen.dart' show parseScoreInput;
-import 'package:teacher/screens/contracts_screen.dart' show resolveFileUrl;
-import 'package:teacher/screens/tabs/assignments_screen.dart' show parseMaxScoreInput;
 import 'package:teacher/screens/tabs/messages_screen.dart';
+import 'package:teacher/services/uploads.dart';
 import 'package:teacher/theme/app_theme.dart';
 import 'package:teacher/widgets/sub_scaffold.dart';
 import 'package:teacher/widgets/ui.dart';
@@ -1136,61 +1135,6 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // 13. Ekran yordamchilari — sof funksiyalar (P1-11, P1-12, P2)
-  // -------------------------------------------------------------------------
-  //
-  // Bu ekranlar uchun alohida test fayli yo'q, kirishni tekshirish mantiqi esa
-  // aynan foydalanuvchi ma'lumotini yo'qotadigan joy edi — shuning uchun
-  // yordamchilar top-level qilib chiqarildi va shu yerda qamrab olindi.
-  group('P1-11 — parseScoreInput (topshiriq bali)', () {
-    test('vergulli kasr QABUL qilinadi (o\'zbek/rus klaviaturasi)', () {
-      expect(parseScoreInput('8,5'), 8.5);
-      expect(parseScoreInput(' 8,5 '), 8.5);
-      expect(parseScoreInput('0,5'), 0.5);
-    });
-
-    test('nuqtali kasr va butun son avvalgidek ishlaydi', () {
-      expect(parseScoreInput('8.5'), 8.5);
-      expect(parseScoreInput('10'), 10);
-      expect(parseScoreInput('0'), 0);
-    });
-
-    test('yaroqsiz kirish null (jimgina "saqlandi" bo\'lmasin)', () {
-      expect(parseScoreInput('abc'), isNull);
-      expect(parseScoreInput(''), isNull);
-      expect(parseScoreInput('   '), isNull);
-      expect(parseScoreInput('8,5,5'), isNull);
-      expect(parseScoreInput('NaN'), isNull);
-      expect(parseScoreInput('Infinity'), isNull);
-    });
-
-    test('manfiy son PARSE qilinadi (chegara tekshiruvi chaqiruvchida)', () {
-      expect(parseScoreInput('-10'), -10);
-    });
-  });
-
-  group('P1-12 — parseMaxScoreInput (maksimal ball)', () {
-    test('musbat son qabul qilinadi, vergul ham', () {
-      expect(parseMaxScoreInput('100'), 100);
-      expect(parseMaxScoreInput('7,5'), 7.5);
-      expect(parseMaxScoreInput('7.5'), 7.5);
-    });
-
-    test('yaroqsiz matn 100 ga AYLANMAYDI — null', () {
-      expect(parseMaxScoreInput('abc'), isNull);
-      expect(parseMaxScoreInput(''), isNull);
-      expect(parseMaxScoreInput('  '), isNull);
-      expect(parseMaxScoreInput('1e400'), isNull, reason: 'cheksiz');
-    });
-
-    test('0 va manfiy qiymat rad etiladi', () {
-      expect(parseMaxScoreInput('0'), isNull);
-      expect(parseMaxScoreInput('-10'), isNull);
-      expect(parseMaxScoreInput('-0,5'), isNull);
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // 14. Xabarlar tabi — poller (P1-7, P1-8) va composer (U17)
   // -------------------------------------------------------------------------
   group('MessagesScreen — chat polleri', () {
@@ -1363,9 +1307,16 @@ void main() {
     });
   });
 
-  group('P2 — resolveFileUrl (shartnoma PDF manzili)', () {
+  // -------------------------------------------------------------------------
+  // 15. `/uploads` yordamchisi — manzil ulash va TOKEN sarlavhasi
+  // -------------------------------------------------------------------------
+  //
+  // `/uploads` endi login talab qiladi (backend commit `52eda96`): sarlavhasiz
+  // so'rov 404 bo'ladi. Shuning uchun manzil ham, sarlavha ham BITTA joydan
+  // (`Uploads`) olinadi va shu yerda qulflanadi.
+  group('Uploads.resolve — fayl manzili', () {
     test('boshida "/" bo\'lmagan nisbiy manzil TO\'G\'RI ulanadi', () {
-      final u = resolveFileUrl('uploads/x.pdf');
+      final u = Uploads.resolve('uploads/x.pdf');
       expect(u, isNotNull);
       expect(u.toString(), '$kFileBaseUrl/uploads/x.pdf');
       expect(u.toString(), isNot(contains('uzuploads')));
@@ -1373,18 +1324,58 @@ void main() {
     });
 
     test('boshida "/" bor manzil ham bir xil natija beradi', () {
-      expect(resolveFileUrl('/uploads/x.pdf').toString(), '$kFileBaseUrl/uploads/x.pdf');
-      expect(resolveFileUrl('/uploads/x.pdf'), resolveFileUrl('uploads/x.pdf'));
+      expect(Uploads.resolve('/uploads/x.pdf').toString(), '$kFileBaseUrl/uploads/x.pdf');
+      expect(Uploads.resolve('/uploads/x.pdf'), Uploads.resolve('uploads/x.pdf'));
     });
 
     test('to\'liq http manzil o\'zgarishsiz qoladi', () {
-      expect(resolveFileUrl('https://cdn.example.uz/a.pdf').toString(),
+      expect(Uploads.resolve('https://cdn.example.uz/a.pdf').toString(),
           'https://cdn.example.uz/a.pdf');
     });
 
     test('bo\'sh manzil null', () {
-      expect(resolveFileUrl(''), isNull);
-      expect(resolveFileUrl('   '), isNull);
+      expect(Uploads.resolve(''), isNull);
+      expect(Uploads.resolve('   '), isNull);
+    });
+  });
+
+  group('Uploads.authHeaders — token sarlavhasi', () {
+    tearDown(() => ApiClient.token = null);
+
+    test('token bor — Bearer sarlavhasi qo\'shiladi', () {
+      ApiClient.token = 'abc.def';
+      expect(Uploads.authHeaders(), {'Authorization': 'Bearer abc.def'});
+    });
+
+    test('token yo\'q/bo\'sh — sarlavha umuman yo\'q (null satr yozilmasin)', () {
+      ApiClient.token = null;
+      expect(Uploads.authHeaders(), isEmpty);
+      ApiClient.token = '';
+      expect(Uploads.authHeaders(), isEmpty);
+    });
+
+    test('image() manbasi ham AYNI sarlavhani oladi', () {
+      ApiClient.token = 'zzz';
+      final p = Uploads.image('/uploads/a.jpg');
+      expect(p, isA<NetworkImage>());
+      final n = p! as NetworkImage;
+      expect(n.url, '$kFileBaseUrl/uploads/a.jpg');
+      expect(n.headers, {'Authorization': 'Bearer zzz'});
+    });
+
+    test('image() bo\'sh manzilda null (chaqiruvchi bosh harflarni chizadi)', () {
+      expect(Uploads.image(''), isNull);
+    });
+  });
+
+  group('Uploads.fileNameOf — vaqtinchalik fayl nomi', () {
+    test('manzildan oxirgi bo\'lak olinadi (kengaytmasi bilan)', () {
+      expect(Uploads.fileNameOf('/uploads/abc123.pdf'), 'abc123.pdf');
+      expect(Uploads.fileNameOf('https://cdn.example.uz/a/b/c.png'), 'c.png');
+    });
+
+    test('bo\'sh manzilda zaxira nom', () {
+      expect(Uploads.fileNameOf(''), 'fayl');
     });
   });
 }

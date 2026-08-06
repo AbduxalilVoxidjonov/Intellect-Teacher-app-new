@@ -1,5 +1,5 @@
 // Backend (IntellectCRM) bilan bir xil shakldagi modellar — teacher.ts, journal.ts,
-// grading.ts, curriculum.ts, assignments.ts (IntellectCRM.Client/src/api/services) dan.
+// grading.ts, curriculum.ts, contacts.ts (IntellectCRM.Client/src/api/services) dan.
 // Faqat o'qituvchi (teacher) portali uchun kerakli tiplar.
 
 /* ---------- Xavfsiz parsing yordamchilari ---------- */
@@ -87,7 +87,7 @@ bool? _bn(dynamic v) {
 /// Har doim `Map<String, dynamic>` qaytaradi: Map bo'lmasa — bo'sh map
 /// (barcha `fromJson` bo'sh map bilan ishlay oladi).
 ///
-/// Kalit String bo'lmasa `toString()` bilan saqlanadi — `_intMap` va
+/// Kalit String bo'lmasa `toString()` bilan saqlanadi —
 /// `teacher_api.dart::_asMap` bilan BIR XIL qoida. Avval bunday map butunlay
 /// tashlab yuborilardi, ya'ni bitta raqamli kalit qolgan hamma maydonni
 /// (masalan `group.id` ni) yo'q qilardi.
@@ -118,14 +118,6 @@ List<int> _intList(dynamic v) {
   if (v is! List) return <int>[];
   return v.where((e) => e != null).map((e) => _i(e)).toList();
 }
-
-Map<String, int> _intMap(dynamic v) {
-  if (v is! Map) return <String, int>{};
-  // Kalit String bo'lmasa `toString()` bilan saqlanadi: raqamli kalit ({1: 5})
-  // odatda o'quvchi/mezon id si — uni tashlab yuborish ma'lumot yo'qotish bo'lardi.
-  return v.map((k, val) => MapEntry(_s(k), _i(val)));
-}
-
 
 /* ---------- Kurslar (fanlar) ---------- */
 
@@ -170,163 +162,9 @@ class TeacherClass {
       );
 }
 
-/* ---------- O'quvchilarni baholash (o'qituvchi o'z fanidan) ---------- */
+/* ---------- Yuklangan fayl (onlayn test savollari) ---------- */
 
-class EvaluationType {
-  final String id;
-  final String name;
-  final String description;
-
-  EvaluationType({required this.id, required this.name, required this.description});
-
-  factory EvaluationType.fromJson(Map<String, dynamic> j) => EvaluationType(
-        id: _s(j['id']),
-        name: _s(j['name']),
-        description: _s(j['description']),
-      );
-}
-
-class AttendanceReasonCount {
-  final String reasonId;
-  final String name;
-  final String short;
-  final bool isLate;
-  final int count;
-
-  AttendanceReasonCount({
-    required this.reasonId,
-    required this.name,
-    required this.short,
-    required this.isLate,
-    required this.count,
-  });
-
-  factory AttendanceReasonCount.fromJson(Map<String, dynamic> j) => AttendanceReasonCount(
-        reasonId: _s(j['reasonId']),
-        name: _s(j['name']),
-        short: _s(j['short']),
-        isLate: _b(j['isLate']),
-        count: _i(j['count']),
-      );
-}
-
-class EvaluationRow {
-  final String studentId;
-  final String fullName;
-  final String className;
-  /** O'tilgan darslar soni */
-  final int conducted;
-  /** Qatnashgan darslar */
-  final int attended;
-  final List<AttendanceReasonCount> reasons;
-  /** Baholash turi id -> baho (1-5) */
-  final Map<String, int> grades;
-  final double avgGrade;
-
-  EvaluationRow({
-    required this.studentId,
-    required this.fullName,
-    required this.className,
-    required this.conducted,
-    required this.attended,
-    required this.reasons,
-    required this.grades,
-    required this.avgGrade,
-  });
-
-  factory EvaluationRow.fromJson(Map<String, dynamic> j) => EvaluationRow(
-        studentId: _s(j['studentId']),
-        fullName: _s(j['fullName']),
-        className: _s(j['className']),
-        conducted: _i(j['conducted']),
-        attended: _i(j['attended']),
-        reasons: _list(j['reasons'], AttendanceReasonCount.fromJson),
-        grades: _intMap(j['grades']),
-        avgGrade: _d(j['avgGrade']),
-      );
-}
-
-/** {id, name} ko'rinishidagi ma'lumotnoma (EvaluationBoard.subjects/groups). */
-class IdNameOption {
-  final String id;
-  final String name;
-
-  IdNameOption({required this.id, required this.name});
-
-  factory IdNameOption.fromJson(Map<String, dynamic> j) =>
-      IdNameOption(id: _s(j['id']), name: _s(j['name']));
-}
-
-class EvaluationBoard {
-  final List<String> months;
-  final String month;
-  final int week;
-  final List<EvaluationType> types;
-  final List<EvaluationRow> rows;
-  final String? subjectId;
-  final List<IdNameOption>? subjects;
-  final List<IdNameOption>? groups;
-  final String? groupId;
-
-  EvaluationBoard({
-    required this.months,
-    required this.month,
-    required this.week,
-    required this.types,
-    required this.rows,
-    this.subjectId,
-    this.subjects,
-    this.groups,
-    this.groupId,
-  });
-
-  factory EvaluationBoard.fromJson(Map<String, dynamic> j) => EvaluationBoard(
-        months: _strList(j['months']),
-        month: _s(j['month']),
-        week: _i(j['week']),
-        types: _list(j['types'], EvaluationType.fromJson),
-        rows: _list(j['rows'], EvaluationRow.fromJson),
-        subjectId: _sn(j['subjectId']),
-        subjects: j['subjects'] == null ? null : _list(j['subjects'], IdNameOption.fromJson),
-        groups: j['groups'] == null ? null : _list(j['groups'], IdNameOption.fromJson),
-        groupId: _sn(j['groupId']),
-      );
-}
-
-/* ---------- Topshiriqlar ---------- */
-
-/** 'written' | 'file' | 'test' | 'video' | 'speaking' */
-typedef AssignmentFormat = String;
-
-/** Topshiriqqa biriktirilgan material (server qaytargan, id bilan) */
-class AssignmentMaterial {
-  final String id;
-  final String name;
-  final String url;
-  final int size;
-  final String contentType;
-  final String? audioUrl;
-
-  AssignmentMaterial({
-    required this.id,
-    required this.name,
-    required this.url,
-    required this.size,
-    required this.contentType,
-    this.audioUrl,
-  });
-
-  factory AssignmentMaterial.fromJson(Map<String, dynamic> j) => AssignmentMaterial(
-        id: _s(j['id']),
-        name: _s(j['name']),
-        url: _s(j['url']),
-        size: _i(j['size']),
-        contentType: _s(j['contentType']),
-        audioUrl: _sn(j['audioUrl']),
-      );
-}
-
-/** Topshiriq materiali kiritmasi (yuklangach metadata; id yo'q) */
+/** Yuklangan fayl metadatasi (`POST /teacher/test-results/uploads` javobi) */
 class MaterialInput {
   final String name;
   final String url;
@@ -357,247 +195,6 @@ class MaterialInput {
         'contentType': contentType,
         'audioUrl': audioUrl,
       };
-}
-
-/** Test savoli (server qaytargan, id bilan) */
-class TestQuestion {
-  final String id;
-  final String text;
-  final List<String> options;
-  final int correctIndex;
-  final int order;
-
-  TestQuestion({
-    required this.id,
-    required this.text,
-    required this.options,
-    required this.correctIndex,
-    required this.order,
-  });
-
-  factory TestQuestion.fromJson(Map<String, dynamic> j) => TestQuestion(
-        id: _s(j['id']),
-        text: _s(j['text']),
-        options: _strList(j['options']),
-        correctIndex: _i(j['correctIndex']),
-        order: _i(j['order']),
-      );
-}
-
-/** Test savoli kiritmasi (id yo'q) */
-class QuestionInput {
-  final String text;
-  final List<String> options;
-  final int correctIndex;
-
-  QuestionInput({required this.text, required this.options, required this.correctIndex});
-
-  factory QuestionInput.fromJson(Map<String, dynamic> j) => QuestionInput(
-        text: _s(j['text']),
-        options: _strList(j['options']),
-        correctIndex: _i(j['correctIndex']),
-      );
-
-  Map<String, dynamic> toJson() => {
-        'text': text,
-        'options': options,
-        'correctIndex': correctIndex,
-      };
-}
-
-/** Topshiriq yaratish/tahrirlash kiritmasi */
-class SaveAssignmentInput {
-  final String subjectId;
-  final String title;
-  final String? description;
-  final AssignmentFormat format;
-  final List<String> classIds;
-  final String? startDate;
-  final String? dueDate;
-  final bool lateAccept;
-  final double latePenaltyPct;
-  final double maxScore;
-  final bool autoGrade;
-  final List<MaterialInput> materials;
-  final List<QuestionInput> questions;
-  /** Speaking (format=speaking) uchun o'qiladigan matn */
-  final String? referenceText;
-
-  SaveAssignmentInput({
-    required this.subjectId,
-    required this.title,
-    this.description,
-    required this.format,
-    required this.classIds,
-    this.startDate,
-    this.dueDate,
-    required this.lateAccept,
-    required this.latePenaltyPct,
-    required this.maxScore,
-    required this.autoGrade,
-    required this.materials,
-    required this.questions,
-    this.referenceText,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'subjectId': subjectId,
-        'title': title,
-        'description': description,
-        'format': format,
-        'classIds': classIds,
-        'startDate': startDate,
-        'dueDate': dueDate,
-        'lateAccept': lateAccept,
-        'latePenaltyPct': latePenaltyPct,
-        'maxScore': maxScore,
-        'autoGrade': autoGrade,
-        'materials': materials.map((m) => m.toJson()).toList(),
-        'questions': questions.map((q) => q.toJson()).toList(),
-        'referenceText': referenceText,
-      };
-}
-
-/** Topshiriq/test (boy model) */
-class Assignment {
-  final String id;
-  final String createdByUserId;
-  final String subjectId;
-  final String subjectName;
-  final String title;
-  final String description;
-  final AssignmentFormat format;
-  final List<String> classIds;
-  final List<String> classNames;
-  final String? startDate;
-  final String? dueDate;
-  final bool lateAccept;
-  final double latePenaltyPct;
-  final double maxScore;
-  final bool autoGrade;
-  final String createdAt;
-  final List<AssignmentMaterial> materials;
-  final List<TestQuestion> questions;
-  final String? referenceText;
-
-  Assignment({
-    required this.id,
-    required this.createdByUserId,
-    required this.subjectId,
-    required this.subjectName,
-    required this.title,
-    required this.description,
-    required this.format,
-    required this.classIds,
-    required this.classNames,
-    this.startDate,
-    this.dueDate,
-    required this.lateAccept,
-    required this.latePenaltyPct,
-    required this.maxScore,
-    required this.autoGrade,
-    required this.createdAt,
-    required this.materials,
-    required this.questions,
-    this.referenceText,
-  });
-
-  factory Assignment.fromJson(Map<String, dynamic> j) => Assignment(
-        id: _s(j['id']),
-        createdByUserId: _s(j['createdByUserId']),
-        subjectId: _s(j['subjectId']),
-        subjectName: _s(j['subjectName']),
-        title: _s(j['title']),
-        description: _s(j['description']),
-        format: _s(j['format']),
-        classIds: _strList(j['classIds']),
-        classNames: _strList(j['classNames']),
-        startDate: _sn(j['startDate']),
-        dueDate: _sn(j['dueDate']),
-        lateAccept: _b(j['lateAccept']),
-        latePenaltyPct: _d(j['latePenaltyPct']),
-        maxScore: _d(j['maxScore']),
-        autoGrade: _b(j['autoGrade']),
-        createdAt: _s(j['createdAt']),
-        materials: _list(j['materials'], AssignmentMaterial.fromJson),
-        questions: _list(j['questions'], TestQuestion.fromJson),
-        referenceText: _sn(j['referenceText']),
-      );
-}
-
-class AssignmentType {
-  final String id;
-  final String name;
-
-  AssignmentType({required this.id, required this.name});
-
-  factory AssignmentType.fromJson(Map<String, dynamic> j) =>
-      AssignmentType(id: _s(j['id']), name: _s(j['name']));
-}
-
-/** Topshiriq natijasi — bitta o'quvchining holati */
-class SubmissionRow {
-  final String studentId;
-  final String studentName;
-  final String className;
-  final bool completed;
-  final String? submittedAt;
-  final double? score;
-  final String? answerText;
-  final String? fileUrl;
-
-  SubmissionRow({
-    required this.studentId,
-    required this.studentName,
-    required this.className,
-    required this.completed,
-    this.submittedAt,
-    this.score,
-    this.answerText,
-    this.fileUrl,
-  });
-
-  factory SubmissionRow.fromJson(Map<String, dynamic> j) => SubmissionRow(
-        studentId: _s(j['studentId']),
-        studentName: _s(j['studentName']),
-        className: _s(j['className']),
-        completed: _b(j['completed']),
-        submittedAt: _sn(j['submittedAt']),
-        score: _dn(j['score']),
-        answerText: _sn(j['answerText']),
-        fileUrl: _sn(j['fileUrl']),
-      );
-}
-
-/** Topshiriq bo'yicha natijalar (kim bajardi/bajarmadi) */
-class AssignmentResult {
-  final String assignmentId;
-  final String title;
-  final AssignmentFormat format;
-  final double maxScore;
-  final int total;
-  final int completedCount;
-  final List<SubmissionRow> rows;
-
-  AssignmentResult({
-    required this.assignmentId,
-    required this.title,
-    required this.format,
-    required this.maxScore,
-    required this.total,
-    required this.completedCount,
-    required this.rows,
-  });
-
-  factory AssignmentResult.fromJson(Map<String, dynamic> j) => AssignmentResult(
-        assignmentId: _s(j['assignmentId']),
-        title: _s(j['title']),
-        format: _s(j['format']),
-        maxScore: _d(j['maxScore']),
-        total: _i(j['total']),
-        completedCount: _i(j['completedCount']),
-        rows: _list(j['rows'], SubmissionRow.fromJson),
-      );
 }
 
 /* ---------- Xabarlar (guruh chati) ---------- */
@@ -1038,6 +635,12 @@ class GroupJournalStudent {
       ism binafsha-pushti rangda ko'rsatiladi (web bilan bir xil, `HEAVY_DEBT_MONTHS`). */
   final int debtMonths;
 
+  /** O'quvchi surati ("/uploads/..."), bo'lmasa bo'sh satr.
+      DIQQAT: backendda u `Student.BirthCertificateUrl` ustunida saqlanadi — nomi
+      ALDAMCHI, bu tug'ilganlik guvohnomasi emas, o'quvchining RASMI. Jurnalda
+      F.I.SH bosilganda ochiladi (o'qituvchi o'quvchini yuzidan tanisin). */
+  final String photoUrl;
+
   GroupJournalStudent({
     required this.studentId,
     required this.fullName,
@@ -1048,6 +651,7 @@ class GroupJournalStudent {
     this.presentDefaultFrom = '',
     this.frozenAt = '',
     this.debtMonths = 0,
+    this.photoUrl = '',
   });
 
   factory GroupJournalStudent.fromJson(Map<String, dynamic> j) => GroupJournalStudent(
@@ -1060,6 +664,7 @@ class GroupJournalStudent {
         presentDefaultFrom: _s(j['presentDefaultFrom']),
         frozenAt: _s(j['frozenAt']),
         debtMonths: _i(j['debtMonths']),
+        photoUrl: _s(j['photoUrl']),
       );
 }
 
@@ -1852,5 +1457,48 @@ class ContractDoc {
         delivered: _b(j['delivered']),
         status: _s(j['status']),
         visible: _b(j['visible']),
+      );
+}
+
+/* ---------- "Bog'lanish kerak" (guruh jurnalidagi «Aloqa» tabi) ---------- */
+
+/** Bog'lanish sababi (`GET /teacher/contact-reasons`, kategoriya "contact") */
+class ContactReason {
+  final String id;
+  final String label;
+
+  ContactReason({required this.id, required this.label});
+
+  factory ContactReason.fromJson(Map<String, dynamic> j) =>
+      ContactReason(id: _s(j['id']), label: _s(j['label']));
+}
+
+/** `POST /teacher/groups/{classId}/contacts` javobi.
+ *
+ * Ochiq talabi bor o'quvchi CHETLAB O'TILADI (butun amal to'xtamaydi) —
+ * shuning uchun javobda uch xil son bor va foydalanuvchiga uchalasi
+ * ham ko'rsatiladi. */
+class ContactBulkResult {
+  /** Navbatga tushgan o'quvchilar soni */
+  final int created;
+  /** Ochiq talabi bo'lgani uchun o'tkazib yuborilganlar */
+  final int skipped;
+  /** O'tkazib yuborilganlarning ismlari (serverda cheklangan bo'lishi mumkin) */
+  final List<String> skippedNames;
+  /** Bazadan topilmagan (yoki bu guruhga tegishli bo'lmagan) id lar soni */
+  final int notFound;
+
+  ContactBulkResult({
+    required this.created,
+    required this.skipped,
+    required this.skippedNames,
+    required this.notFound,
+  });
+
+  factory ContactBulkResult.fromJson(Map<String, dynamic> j) => ContactBulkResult(
+        created: _i(j['created']),
+        skipped: _i(j['skipped']),
+        skippedNames: _strList(j['skippedNames']),
+        notFound: _i(j['notFound']),
       );
 }

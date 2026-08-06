@@ -54,6 +54,7 @@ Map<String, dynamic> _student(
   String status = 'active',
   double balance = 0,
   int debtMonths = 0,
+  String photoUrl = '',
 }) =>
     <String, dynamic>{
       'studentId': id,
@@ -65,6 +66,7 @@ Map<String, dynamic> _student(
       'presentDefaultFrom': presentDefaultFrom,
       'frozenAt': '',
       'debtMonths': debtMonths,
+      'photoUrl': photoUrl,
     };
 
 Map<String, dynamic> _entry(
@@ -1368,6 +1370,81 @@ void main() {
       expect(find.textContaining("Maosh ma'lumoti yo'q"), findsOneWidget);
       expect(find.byIcon(Icons.error_outline_rounded), findsNothing);
       expect(find.byType(RefreshIndicator), findsOneWidget);
+    });
+  });
+
+  /* ================================================================ *
+   *  «Aloqa» tabi va F.I.SH → surat oynasi
+   * ================================================================ */
+
+  group('GroupDetailScreen · aloqa va surat', () {
+    void journalRoutes({List<Map<String, dynamic>> students = const []}) {
+      api.on('/teacher/meta', body: _meta(const []));
+      api.on('/teacher/journal/group',
+          body: _journal(columns: const ['2026-03-05'], students: students));
+      api.on('/teacher/grading/group', body: _emptyBoard);
+    }
+
+    testWidgets('«Aloqa» tabi bor va bosilganda navbat ro\'yxati ochiladi', (tester) async {
+      journalRoutes(students: [_student('s1', 'Ali Valiyev')]);
+      api.on('/teacher/contact-reasons', body: const <Object>[]);
+
+      await pumpScreen(tester, _detail);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Aloqa'), findsOneWidget);
+      await tester.tap(find.text('Aloqa'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hammasini tanlash'), findsOneWidget);
+      expect(find.textContaining('Navbatga yuborish'), findsOneWidget);
+      // Sabablar SHU tab ochilganda so'raladi (jurnal bilan birga emas).
+      expect(api.countOf('/teacher/contact-reasons'), 1);
+    });
+
+    testWidgets('«Aloqa» tabida MUZLATILGAN o\'quvchi ko\'rinmaydi', (tester) async {
+      journalRoutes(students: [
+        _student('s1', 'Ali Valiyev'),
+        _student('s2', 'Muzlagan Muzlatilov', status: 'frozen'),
+      ]);
+      api.on('/teacher/contact-reasons', body: const <Object>[]);
+
+      await pumpScreen(tester, _detail);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aloqa'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ali Valiyev'), findsOneWidget);
+      expect(find.text('Muzlagan Muzlatilov'), findsNothing);
+    });
+
+    testWidgets('jurnalda F.I.SH bosilsa SURAT oynasi ochiladi', (tester) async {
+      journalRoutes(students: [_student('s1', 'Ali Valiyev')]);
+
+      await pumpScreen(tester, _detail);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Ali Valiyev').first);
+      await tester.pumpAndSettle();
+
+      // Surati yo'q — oyna baribir ochiladi va sababini aytadi (jimgina
+      // hech nima bo'lmasligi chalg'itardi).
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.text('Rasm yuklanmagan'), findsOneWidget);
+    });
+
+    testWidgets('surati BOR o\'quvchida ism yonida ikonka turadi', (tester) async {
+      journalRoutes(students: [
+        _student('s1', 'Ali Valiyev', photoUrl: '/uploads/a.jpg'),
+        _student('s2', 'Vali Aliyev'),
+      ]);
+
+      await pumpScreen(tester, _detail);
+      await tester.pumpAndSettle();
+
+      // Jurnal va Davomat tablari alohida chiziladi — bir vaqtda faqat biri
+      // ko'rinadi, ya'ni ikonka ham bittadan bo'ladi.
+      expect(find.byIcon(Icons.image_outlined), findsOneWidget);
     });
   });
 }

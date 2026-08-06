@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../services/uploads.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 
@@ -245,7 +246,10 @@ class Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    // `/uploads` login talab qiladi — manba FAQAT `Uploads.image` orqali
+    // olinadi (u `Authorization` sarlavhasini qo'shadi), aks holda rasm 404.
+    final provider = (imageUrl == null || imageUrl!.isEmpty) ? null : Uploads.image(imageUrl!);
+    final hasImage = provider != null;
     final letters = Text(
       initials(name),
       style: TextStyle(color: Colors.white, fontSize: size * 0.38, fontWeight: FontWeight.w700),
@@ -268,8 +272,8 @@ class Avatar extends StatelessWidget {
       ),
       child: hasImage
           ? ClipOval(
-              child: Image.network(
-                imageUrl!,
+              child: Image(
+                image: provider,
                 width: size,
                 height: size,
                 fit: BoxFit.cover,
@@ -280,6 +284,102 @@ class Avatar extends StatelessWidget {
               ),
             )
           : letters,
+    );
+  }
+}
+
+/// O'QUVCHI SURATI OYNASI (web `PhotoViewerModal` bilan bir xil).
+///
+/// Jurnalda F.I.SH bosilganda ochiladi — o'qituvchi o'quvchini yuzidan taniy
+/// olishi uchun. Yangi ekran EMAS (dialog), ya'ni jurnaldan chiqib ketilmaydi.
+///
+/// Surat manbai — `GroupJournalStudent.photoUrl` (backendda u
+/// `Student.BirthCertificateUrl` ustunida yotadi, nomi aldamchi).
+/// Rasm yo'q yoki yuklanmasa — bosh harflar va tushuntirish matni.
+Future<void> showPhotoViewer(
+  BuildContext context, {
+  required String name,
+  required String photoUrl,
+}) {
+  final c = AppTheme.of(context);
+  final provider = photoUrl.isEmpty ? null : Uploads.image(photoUrl);
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      final media = MediaQuery.of(ctx).size;
+      final wide = media.width >= 700;
+      return Dialog(
+        backgroundColor: c.surface,
+        insetPadding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: wide ? media.width * 0.7 : media.width * 0.92,
+            maxHeight: wide ? media.height * 0.8 : media.height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: c.text),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Yopish',
+                      icon: Icon(Icons.close_rounded, color: c.muted),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                  child: provider == null
+                      ? _PhotoFallback(name: name)
+                      : Image(
+                          image: provider,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (ctx2, child, ev) =>
+                              ev == null ? child : const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 40),
+                                    child: Loader(),
+                                  ),
+                          errorBuilder: (ctx2, _, __) => _PhotoFallback(name: name),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// Surat yo'q / ochilmadi — bosh harflar bilan zaxira ko'rinish.
+class _PhotoFallback extends StatelessWidget {
+  final String name;
+  const _PhotoFallback({required this.name});
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Avatar(name: name, size: 96),
+        const SizedBox(height: 12),
+        Text('Rasm yuklanmagan', style: TextStyle(fontSize: 13, color: c.muted)),
+      ],
     );
   }
 }

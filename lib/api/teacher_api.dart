@@ -85,112 +85,6 @@ class TeacherApi {
         .toList();
   }
 
-  /* ---------- O'quvchilarni baholash (o'z fanidan) ---------- */
-
-  static Future<List<EvaluationType>> evalTypes() async {
-    final res = await ApiClient.dio.get('/teacher/evaluation/types');
-    _check(res);
-    return _asList(res.data)
-        .map((e) => EvaluationType.fromJson(_asMap(e)))
-        .toList();
-  }
-
-  static Future<EvaluationBoard> evalBoard(
-    String classId,
-    String subjectId, {
-    String? month,
-  }) async {
-    final res = await ApiClient.dio.get(
-      '/teacher/evaluation/board',
-      queryParameters: _qp({'classId': classId, 'subjectId': subjectId, 'month': month}),
-    );
-    _check(res);
-    return EvaluationBoard.fromJson(_asMap(res.data));
-  }
-
-  static Future<void> setEvalGrade(
-    String classId,
-    String subjectId,
-    String studentId,
-    String typeId,
-    String month,
-    int? score,
-  ) async {
-    final res = await ApiClient.dio.post('/teacher/evaluation/grade', data: {
-      'classId': classId,
-      'subjectId': subjectId,
-      'studentId': studentId,
-      'typeId': typeId,
-      'month': month,
-      'week': 0,
-      'score': score,
-    });
-    _check(res);
-  }
-
-  /* ---------- Topshiriqlar ---------- */
-
-  static Future<List<Assignment>> assignments() async {
-    final res = await ApiClient.dio.get('/teacher/assignments');
-    _check(res);
-    return _asList(res.data)
-        .map((e) => Assignment.fromJson(_asMap(e)))
-        .toList();
-  }
-
-  static Future<Assignment> createAssignment(SaveAssignmentInput input) async {
-    final res = await ApiClient.dio.post('/teacher/assignments', data: input.toJson());
-    _check(res);
-    return Assignment.fromJson(_asMap(res.data));
-  }
-
-  static Future<void> updateAssignment(String id, SaveAssignmentInput input) async {
-    final res = await ApiClient.dio.put('/teacher/assignments/$id', data: input.toJson());
-    _check(res);
-  }
-
-  static Future<void> deleteAssignment(String id) async {
-    final res = await ApiClient.dio.delete('/teacher/assignments/$id');
-    _check(res);
-  }
-
-  static Future<AssignmentResult> assignmentResults(String id) async {
-    final res = await ApiClient.dio.get('/teacher/assignments/$id/results');
-    _check(res);
-    return AssignmentResult.fromJson(_asMap(res.data));
-  }
-
-  static Future<void> setSubmission(
-    String id,
-    String studentId,
-    bool completed, {
-    double? score,
-  }) async {
-    final res = await ApiClient.dio.put(
-      '/teacher/assignments/$id/submissions/$studentId',
-      data: {'completed': completed, 'score': score},
-    );
-    _check(res);
-  }
-
-  static Future<MaterialInput> uploadFile(List<int> bytes, String filename) async {
-    _checkSize(bytes);
-    final fd = FormData.fromMap({
-      'file': MultipartFile.fromBytes(bytes, filename: filename),
-    });
-    final res = await ApiClient.dio.post('/teacher/uploads', data: fd);
-    _check(res);
-    return MaterialInput.fromJson(_asMap(res.data));
-  }
-
-  static Future<List<AssignmentType>> assignmentTypes() async {
-    final res = await ApiClient.dio.get('/teacher/assignment-types');
-    _check(res);
-    return _asList(res.data)
-        .map((e) => AssignmentType.fromJson(_asMap(e)))
-        .toList();
-  }
-
   /* ---------- Meta ---------- */
 
   static Future<PortalMeta?> meta() async {
@@ -584,5 +478,37 @@ class TeacherApi {
     return data
         .map((e) => ContractDoc.fromJson(_asMap(e)))
         .toList();
+  }
+
+  /* ---------- "Bog'lanish kerak" (guruh jurnalidagi «Aloqa» tabi) ---------- */
+
+  /// Bog'lanish sabablari katalogi (Sozlamalar → Sabablar, kategoriya "contact").
+  /// Admin endpointi (`/api/admin/action-reasons`) o'qituvchiga YOPIQ, shuning
+  /// uchun alohida marshrut bor.
+  static Future<List<ContactReason>> contactReasons() async {
+    final res = await ApiClient.dio.get('/teacher/contact-reasons');
+    _check(res);
+    return _asList(res.data)
+        .map((e) => ContactReason.fromJson(_asMap(e)))
+        .toList();
+  }
+
+  /// O'z guruhidagi o'quvchilarni "Bog'lanish kerak" navbatiga yuboradi.
+  ///
+  /// SANA YUBORILMAYDI — talab darhol navbatga tushadi (bugungi ish);
+  /// rejalashtirish (qayta qo'ng'iroq sanasi) operatorning ishi.
+  /// Sabab va izoh tanlanganlarning HAMMASIGA bir xil qo'yiladi.
+  static Future<ContactBulkResult> sendToContactQueue(
+    String classId,
+    List<String> studentIds,
+    String reasonId,
+    String note,
+  ) async {
+    final res = await ApiClient.dio.post(
+      '/teacher/groups/${Uri.encodeComponent(classId)}/contacts',
+      data: {'studentIds': studentIds, 'reasonId': reasonId, 'note': note},
+    );
+    _check(res);
+    return ContactBulkResult.fromJson(_asMap(res.data));
   }
 }

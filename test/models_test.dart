@@ -43,12 +43,12 @@ void main() {
 
   group('_sn (String?, null → null)', () {
     test('null / kalit yo\'q → null', () {
-      expect(AssignmentMaterial.fromJson({}).audioUrl, isNull);
-      expect(AssignmentMaterial.fromJson({'audioUrl': null}).audioUrl, isNull);
+      expect(MaterialInput.fromJson({}).audioUrl, isNull);
+      expect(MaterialInput.fromJson({'audioUrl': null}).audioUrl, isNull);
     });
     test('qiymat bo\'lsa satrga aylanadi', () {
-      expect(AssignmentMaterial.fromJson({'audioUrl': '/a.mp3'}).audioUrl, '/a.mp3');
-      expect(AssignmentMaterial.fromJson({'audioUrl': 7}).audioUrl, '7');
+      expect(MaterialInput.fromJson({'audioUrl': '/a.mp3'}).audioUrl, '/a.mp3');
+      expect(MaterialInput.fromJson({'audioUrl': 7}).audioUrl, '7');
     });
   });
 
@@ -200,14 +200,14 @@ void main() {
 
   group('_strList (List<String>, null → [])', () {
     test('null / kalit yo\'q → []', () {
-      expect(Assignment.fromJson({'classIds': null}).classIds, isEmpty);
-      expect(Assignment.fromJson({}).classIds, isEmpty);
+      expect(ContactBulkResult.fromJson({'skippedNames': null}).skippedNames, isEmpty);
+      expect(ContactBulkResult.fromJson({}).skippedNames, isEmpty);
     });
     test('har bir element toString bo\'ladi', () {
-      expect(Assignment.fromJson({'classIds': ['a', 'b']}).classIds, ['a', 'b']);
-      expect(Assignment.fromJson({'classIds': [1, 2.5]}).classIds, ['1', '2.5']);
-      expect(Assignment.fromJson({'classIds': [true]}).classIds, ['true']);
-      expect(Assignment.fromJson({'classIds': ['']}).classIds, ['']);
+      expect(ContactBulkResult.fromJson({'skippedNames': ['a', 'b']}).skippedNames, ['a', 'b']);
+      expect(ContactBulkResult.fromJson({'skippedNames': [1, 2.5]}).skippedNames, ['1', '2.5']);
+      expect(ContactBulkResult.fromJson({'skippedNames': [true]}).skippedNames, ['true']);
+      expect(ContactBulkResult.fromJson({'skippedNames': ['']}).skippedNames, ['']);
     });
   });
 
@@ -221,23 +221,6 @@ void main() {
       expect(GroupJournalInfo.fromJson({'days': ['2', '4']}).days, [2, 4]);
       expect(GroupJournalInfo.fromJson({'days': [1.9, 2.1]}).days, [1, 2]);
       expect(GroupJournalInfo.fromJson({'days': ['x']}).days, [0]);
-    });
-  });
-
-  group('_intMap (Map<String,int>, null → {})', () {
-    test('null / kalit yo\'q / {} → bo\'sh map', () {
-      expect(EvaluationRow.fromJson({'grades': null}).grades, isEmpty);
-      expect(EvaluationRow.fromJson({}).grades, isEmpty);
-      expect(EvaluationRow.fromJson({'grades': {}}).grades, isEmpty);
-    });
-    test('qiymatlar _i orqali o\'tadi', () {
-      expect(EvaluationRow.fromJson({'grades': {'t1': 5, 't2': 3}}).grades, {'t1': 5, 't2': 3});
-      expect(EvaluationRow.fromJson({'grades': {'t1': '4'}}).grades, {'t1': 4});
-      expect(EvaluationRow.fromJson({'grades': {'t1': 4.8}}).grades, {'t1': 4});
-    });
-    test('null/yaroqsiz qiymat → 0 (kalit qoladi)', () {
-      expect(EvaluationRow.fromJson({'grades': {'t1': null}}).grades, {'t1': 0});
-      expect(EvaluationRow.fromJson({'grades': {'t1': 'bad'}}).grades, {'t1': 0});
     });
   });
 
@@ -294,162 +277,8 @@ void main() {
   });
 
   /* ==================================================================
-   * 2. Baholash (evaluation)
+   * 2. Yuklangan fayl (onlayn test savollari)
    * ================================================================== */
-
-  group('EvaluationType', () {
-    test('to\'liq JSON', () {
-      final t = EvaluationType.fromJson({'id': 'e1', 'name': 'Faollik', 'description': 'darsda'});
-      expect([t.id, t.name, t.description], ['e1', 'Faollik', 'darsda']);
-    });
-    test('bo\'sh JSON', () {
-      final t = EvaluationType.fromJson({});
-      expect([t.id, t.name, t.description], ['', '', '']);
-    });
-  });
-
-  group('AttendanceReasonCount', () {
-    test('to\'liq JSON', () {
-      final r = AttendanceReasonCount.fromJson({
-        'reasonId': 'r1',
-        'name': 'Kasal',
-        'short': 'K',
-        'isLate': false,
-        'count': 3,
-      });
-      expect(r.reasonId, 'r1');
-      expect(r.name, 'Kasal');
-      expect(r.short, 'K');
-      expect(r.isLate, isFalse);
-      expect(r.count, 3);
-    });
-    test('bo\'sh JSON', () {
-      final r = AttendanceReasonCount.fromJson({});
-      expect(r.reasonId, '');
-      expect(r.isLate, isFalse);
-      expect(r.count, 0);
-    });
-    test('isLate raqam bilan',
-        () => expect(AttendanceReasonCount.fromJson({'isLate': 1}).isLate, isTrue));
-  });
-
-  group('EvaluationRow', () {
-    test('to\'liq JSON', () {
-      final r = EvaluationRow.fromJson({
-        'studentId': 'st-1',
-        'fullName': 'Ali Valiyev',
-        'className': 'Beginner A',
-        'conducted': 20,
-        'attended': 18,
-        'reasons': [
-          {'reasonId': 'r1', 'name': 'Kasal', 'short': 'K', 'isLate': false, 'count': 2}
-        ],
-        'grades': {'e1': 5, 'e2': 4},
-        'avgGrade': 4.5,
-      });
-      expect(r.studentId, 'st-1');
-      expect(r.conducted, 20);
-      expect(r.attended, 18);
-      expect(r.reasons.single.count, 2);
-      expect(r.grades, {'e1': 5, 'e2': 4});
-      expect(r.avgGrade, 4.5);
-    });
-    test('bo\'sh JSON', () {
-      final r = EvaluationRow.fromJson({});
-      expect(r.fullName, '');
-      expect(r.conducted, 0);
-      expect(r.reasons, isEmpty);
-      expect(r.grades, isEmpty);
-      expect(r.avgGrade, 0.0);
-    });
-  });
-
-  group('IdNameOption', () {
-    test('to\'liq JSON', () {
-      final o = IdNameOption.fromJson({'id': 'g1', 'name': 'Guruh 1'});
-      expect([o.id, o.name], ['g1', 'Guruh 1']);
-    });
-    test('bo\'sh JSON', () => expect(IdNameOption.fromJson({}).id, ''));
-  });
-
-  group('EvaluationBoard', () {
-    test('to\'liq JSON', () {
-      final b = EvaluationBoard.fromJson({
-        'months': ['2026-06', '2026-07'],
-        'month': '2026-07',
-        'week': 2,
-        'types': [
-          {'id': 'e1', 'name': 'Faollik', 'description': ''}
-        ],
-        'rows': [
-          {'studentId': 'st-1', 'fullName': 'Ali'}
-        ],
-        'subjectId': 'sub-1',
-        'subjects': [
-          {'id': 'sub-1', 'name': 'Ingliz'}
-        ],
-        'groups': [
-          {'id': 'g1', 'name': 'Guruh 1'}
-        ],
-        'groupId': 'g1',
-      });
-      expect(b.months, ['2026-06', '2026-07']);
-      expect(b.month, '2026-07');
-      expect(b.week, 2);
-      expect(b.types.single.name, 'Faollik');
-      expect(b.rows.single.fullName, 'Ali');
-      expect(b.subjectId, 'sub-1');
-      expect(b.subjects!.single.id, 'sub-1');
-      expect(b.groups!.single.name, 'Guruh 1');
-      expect(b.groupId, 'g1');
-    });
-    test('bo\'sh JSON — ixtiyoriy ro\'yxatlar null', () {
-      final b = EvaluationBoard.fromJson({});
-      expect(b.months, isEmpty);
-      expect(b.month, '');
-      expect(b.week, 0);
-      expect(b.types, isEmpty);
-      expect(b.rows, isEmpty);
-      expect(b.subjectId, isNull);
-      expect(b.subjects, isNull);
-      expect(b.groups, isNull);
-      expect(b.groupId, isNull);
-    });
-    test('subjects: [] → null emas, bo\'sh ro\'yxat',
-        () => expect(EvaluationBoard.fromJson({'subjects': []}).subjects, isEmpty));
-    test('groups: null → null',
-        () => expect(EvaluationBoard.fromJson({'groups': null}).groups, isNull));
-  });
-
-  /* ==================================================================
-   * 3. Topshiriqlar
-   * ================================================================== */
-
-  group('AssignmentMaterial', () {
-    test('to\'liq JSON', () {
-      final m = AssignmentMaterial.fromJson({
-        'id': 'm-1',
-        'name': 'unit1.pdf',
-        'url': '/uploads/unit1.pdf',
-        'size': 102400,
-        'contentType': 'application/pdf',
-        'audioUrl': '/uploads/a.mp3',
-      });
-      expect(m.id, 'm-1');
-      expect(m.name, 'unit1.pdf');
-      expect(m.url, '/uploads/unit1.pdf');
-      expect(m.size, 102400);
-      expect(m.contentType, 'application/pdf');
-      expect(m.audioUrl, '/uploads/a.mp3');
-    });
-    test('bo\'sh JSON', () {
-      final m = AssignmentMaterial.fromJson({});
-      expect(m.id, '');
-      expect(m.size, 0);
-      expect(m.audioUrl, isNull);
-    });
-    test('size satr sifatida', () => expect(AssignmentMaterial.fromJson({'size': '2048'}).size, 2048));
-  });
 
   group('MaterialInput', () {
     test('fromJson to\'liq', () {
@@ -501,268 +330,8 @@ void main() {
     });
   });
 
-  group('TestQuestion', () {
-    test('to\'liq JSON', () {
-      final q = TestQuestion.fromJson({
-        'id': 'q-1',
-        'text': '2+2=?',
-        'options': ['3', '4', '5'],
-        'correctIndex': 1,
-        'order': 0,
-      });
-      expect(q.id, 'q-1');
-      expect(q.text, '2+2=?');
-      expect(q.options, ['3', '4', '5']);
-      expect(q.correctIndex, 1);
-      expect(q.order, 0);
-    });
-    test('bo\'sh JSON', () {
-      final q = TestQuestion.fromJson({});
-      expect(q.options, isEmpty);
-      expect(q.correctIndex, 0);
-      expect(q.order, 0);
-    });
-    test('correctIndex chegaradan tashqari — model tekshirmaydi',
-        () => expect(TestQuestion.fromJson({'options': ['a'], 'correctIndex': 9}).correctIndex, 9));
-  });
-
-  group('QuestionInput', () {
-    test('fromJson to\'liq', () {
-      final q = QuestionInput.fromJson({
-        'text': 'Poytaxt?',
-        'options': ['Toshkent', 'Samarqand'],
-        'correctIndex': 0,
-      });
-      expect(q.text, 'Poytaxt?');
-      expect(q.options, hasLength(2));
-      expect(q.correctIndex, 0);
-    });
-    test('fromJson bo\'sh', () {
-      final q = QuestionInput.fromJson({});
-      expect(q.text, '');
-      expect(q.options, isEmpty);
-      expect(q.correctIndex, 0);
-    });
-    test('toJson', () {
-      final j = QuestionInput(text: 'T', options: ['a', 'b'], correctIndex: 1).toJson();
-      expect(j, {'text': 'T', 'options': ['a', 'b'], 'correctIndex': 1});
-    });
-    test('toJson options — o\'sha ro\'yxat obyekti', () {
-      final q = QuestionInput(text: 'T', options: ['a'], correctIndex: 0);
-      expect(q.toJson()['options'], same(q.options));
-    });
-    test('aylanma fromJson→toJson', () {
-      const src = {'text': 'X', 'options': ['1', '2'], 'correctIndex': 1};
-      expect(QuestionInput.fromJson(src).toJson(), src);
-    });
-  });
-
-  group('SaveAssignmentInput.toJson', () {
-    SaveAssignmentInput build({
-      String? description,
-      String? startDate,
-      String? dueDate,
-      String? referenceText,
-      List<MaterialInput>? materials,
-      List<QuestionInput>? questions,
-    }) =>
-        SaveAssignmentInput(
-          subjectId: 'sub-1',
-          title: 'Uy ishi',
-          description: description,
-          format: 'written',
-          classIds: ['c1', 'c2'],
-          startDate: startDate,
-          dueDate: dueDate,
-          lateAccept: true,
-          latePenaltyPct: 10,
-          maxScore: 100,
-          autoGrade: false,
-          materials: materials ?? const [],
-          questions: questions ?? const [],
-          referenceText: referenceText,
-        );
-
-    test('to\'liq — barcha maydonlar', () {
-      final j = build(
-        description: 'tavsif',
-        startDate: '2026-08-01',
-        dueDate: '2026-08-10',
-        referenceText: 'Read this',
-        materials: [
-          MaterialInput(name: 'a.pdf', url: '/u/a', size: 1, contentType: 'application/pdf')
-        ],
-        questions: [QuestionInput(text: 'q', options: ['a', 'b'], correctIndex: 1)],
-      ).toJson();
-      expect(j['subjectId'], 'sub-1');
-      expect(j['title'], 'Uy ishi');
-      expect(j['description'], 'tavsif');
-      expect(j['format'], 'written');
-      expect(j['classIds'], ['c1', 'c2']);
-      expect(j['startDate'], '2026-08-01');
-      expect(j['dueDate'], '2026-08-10');
-      expect(j['lateAccept'], isTrue);
-      expect(j['latePenaltyPct'], 10.0);
-      expect(j['maxScore'], 100.0);
-      expect(j['autoGrade'], isFalse);
-      expect(j['referenceText'], 'Read this');
-    });
-    test('materials/questions ichki toJson chaqiriladi', () {
-      final j = build(
-        materials: [MaterialInput(name: 'a', url: 'u', size: 2, contentType: 'ct')],
-        questions: [QuestionInput(text: 'q', options: ['x'], correctIndex: 0)],
-      ).toJson();
-      expect(j['materials'], isA<List<Map<String, dynamic>>>());
-      expect((j['materials'] as List).single, containsPair('name', 'a'));
-      expect((j['questions'] as List).single, containsPair('correctIndex', 0));
-    });
-    test('bo\'sh materials/questions → bo\'sh ro\'yxat', () {
-      final j = build().toJson();
-      expect(j['materials'], isEmpty);
-      expect(j['questions'], isEmpty);
-    });
-    test('kalitlar to\'plami barqaror', () {
-      expect(
-        build().toJson().keys.toSet(),
-        {
-          'subjectId', 'title', 'description', 'format', 'classIds', 'startDate',
-          'dueDate', 'lateAccept', 'latePenaltyPct', 'maxScore', 'autoGrade',
-          'materials', 'questions', 'referenceText',
-        },
-      );
-    });
-  });
-
-  group('Assignment', () {
-    test('to\'liq JSON', () {
-      final a = Assignment.fromJson({
-        'id': 'a-1',
-        'createdByUserId': 'u-1',
-        'subjectId': 'sub-1',
-        'subjectName': 'Ingliz tili',
-        'title': 'Unit 3',
-        'description': 'Grammar',
-        'format': 'test',
-        'classIds': ['c1'],
-        'classNames': ['Beginner A'],
-        'startDate': '2026-08-01T09:00',
-        'dueDate': '2026-08-05T23:59',
-        'lateAccept': true,
-        'latePenaltyPct': 25,
-        'maxScore': 50,
-        'autoGrade': true,
-        'createdAt': '2026-07-30T12:00:00Z',
-        'materials': [
-          {'id': 'm1', 'name': 'a.pdf', 'url': '/u/a', 'size': 3, 'contentType': 'application/pdf'}
-        ],
-        'questions': [
-          {'id': 'q1', 'text': 'T', 'options': ['a', 'b'], 'correctIndex': 0, 'order': 1}
-        ],
-        'referenceText': 'read me',
-      });
-      expect(a.id, 'a-1');
-      expect(a.subjectName, 'Ingliz tili');
-      expect(a.format, 'test');
-      expect(a.classIds, ['c1']);
-      expect(a.classNames, ['Beginner A']);
-      expect(a.startDate, '2026-08-01T09:00');
-      expect(a.lateAccept, isTrue);
-      expect(a.latePenaltyPct, 25.0);
-      expect(a.maxScore, 50.0);
-      expect(a.autoGrade, isTrue);
-      expect(a.materials.single.id, 'm1');
-      expect(a.questions.single.options, ['a', 'b']);
-      expect(a.referenceText, 'read me');
-    });
-    test('bo\'sh JSON', () {
-      final a = Assignment.fromJson({});
-      expect(a.id, '');
-      expect(a.format, '');
-      expect(a.classIds, isEmpty);
-      expect(a.classNames, isEmpty);
-      expect(a.startDate, isNull);
-      expect(a.dueDate, isNull);
-      expect(a.lateAccept, isFalse);
-      expect(a.latePenaltyPct, 0.0);
-      expect(a.autoGrade, isFalse);
-      expect(a.materials, isEmpty);
-      expect(a.questions, isEmpty);
-      expect(a.referenceText, isNull);
-    });
-    test('startDate null bo\'lsa null qoladi',
-        () => expect(Assignment.fromJson({'startDate': null}).startDate, isNull));
-  });
-
-  group('AssignmentType', () {
-    test('to\'liq JSON', () {
-      final t = AssignmentType.fromJson({'id': 't1', 'name': 'Uy ishi'});
-      expect([t.id, t.name], ['t1', 'Uy ishi']);
-    });
-    test('bo\'sh JSON', () => expect(AssignmentType.fromJson({}).name, ''));
-  });
-
-  group('SubmissionRow', () {
-    test('to\'liq JSON', () {
-      final r = SubmissionRow.fromJson({
-        'studentId': 'st-1',
-        'studentName': 'Ali',
-        'className': 'A',
-        'completed': true,
-        'submittedAt': '2026-08-02T10:00',
-        'score': 47.5,
-        'answerText': 'javob',
-        'fileUrl': '/u/f.pdf',
-      });
-      expect(r.studentId, 'st-1');
-      expect(r.completed, isTrue);
-      expect(r.submittedAt, '2026-08-02T10:00');
-      expect(r.score, 47.5);
-      expect(r.answerText, 'javob');
-      expect(r.fileUrl, '/u/f.pdf');
-    });
-    test('bo\'sh JSON', () {
-      final r = SubmissionRow.fromJson({});
-      expect(r.completed, isFalse);
-      expect(r.submittedAt, isNull);
-      expect(r.score, isNull);
-      expect(r.answerText, isNull);
-      expect(r.fileUrl, isNull);
-    });
-    test('score 0 → null emas', () => expect(SubmissionRow.fromJson({'score': 0}).score, 0.0));
-  });
-
-  group('AssignmentResult', () {
-    test('to\'liq JSON', () {
-      final r = AssignmentResult.fromJson({
-        'assignmentId': 'a-1',
-        'title': 'Unit 3',
-        'format': 'file',
-        'maxScore': 100,
-        'total': 12,
-        'completedCount': 7,
-        'rows': [
-          {'studentId': 'st-1', 'completed': true},
-          {'studentId': 'st-2', 'completed': false},
-        ],
-      });
-      expect(r.assignmentId, 'a-1');
-      expect(r.format, 'file');
-      expect(r.maxScore, 100.0);
-      expect(r.total, 12);
-      expect(r.completedCount, 7);
-      expect(r.rows, hasLength(2));
-      expect(r.rows.last.completed, isFalse);
-    });
-    test('bo\'sh JSON', () {
-      final r = AssignmentResult.fromJson({});
-      expect(r.total, 0);
-      expect(r.completedCount, 0);
-      expect(r.rows, isEmpty);
-    });
-  });
-
   /* ==================================================================
-   * 4. Chat / portal meta
+   * 3. Chat / portal meta
    * ================================================================== */
 
   group('ChatMessage', () {
@@ -2029,14 +1598,14 @@ void main() {
     /* ---------------- BUG-M2 ---------------- */
     group('BUG-M2 (TUZATILDI) — _list buzuq elementni tashlab yuboradi', () {
       test('null elementlar tashlab yuboriladi', () {
-        final r = EvaluationRow.fromJson({
-          'reasons': [
+        final m = PortalMeta.fromJson({
+          'absenceReasons': [
             null,
-            {'reasonId': 'r1'}
+            {'id': 'r1'}
           ]
         });
-        expect(r.reasons, hasLength(1));
-        expect(r.reasons.single.reasonId, 'r1');
+        expect(m.absenceReasons, hasLength(1));
+        expect(m.absenceReasons.single.id, 'r1');
       });
       test('skalyar elementlar ham tashlab yuboriladi', () {
         expect(TeacherClass.fromJson({'subjects': [1]}).subjects, isEmpty);
@@ -2061,19 +1630,14 @@ void main() {
         expect(GroupJournalInfo.fromJson({'days': '1,3,5'}).days, isEmpty);
       });
       test('_strList: months = "" → bo\'sh', () {
-        expect(EvaluationBoard.fromJson({'months': ''}).months, isEmpty);
-      });
-      test('_intMap: grades = [] / "" → bo\'sh', () {
-        expect(EvaluationRow.fromJson({'grades': []}).grades, isEmpty);
-        expect(EvaluationRow.fromJson({'grades': ''}).grades, isEmpty);
+        expect(GroupJournal.fromJson({'months': ''}).months, isEmpty);
       });
       test('_list: subjects = {} (yakka Map) → bo\'sh', () {
         expect(TeacherClass.fromJson({'subjects': {'id': 's1'}}).subjects, isEmpty);
       });
       test('null hamon bo\'sh natija beradi (eski qorovul yutilgan)', () {
         expect(GroupJournalInfo.fromJson({'days': null}).days, isEmpty);
-        expect(EvaluationBoard.fromJson({'months': null}).months, isEmpty);
-        expect(EvaluationRow.fromJson({'grades': null}).grades, isEmpty);
+        expect(GroupJournal.fromJson({'months': null}).months, isEmpty);
         expect(TeacherClass.fromJson({'subjects': null}).subjects, isEmpty);
       });
     });
@@ -2081,16 +1645,16 @@ void main() {
     /* ---------------- BUG-M4 ---------------- */
     group('BUG-M4 (TUZATILDI) — _sn bo\'sh satrni null ga aylantiradi', () {
       test('bo\'sh satr null bo\'ladi', () {
-        expect(Assignment.fromJson({'dueDate': ''}).dueDate, isNull);
+        expect(LessonReschedule.fromJson({'time': ''}).time, isNull);
         expect(GroupCurriculum.fromJson({'estFinishDate': ''}).estFinishDate, isNull);
       });
       test('faqat probeldan iborat satr ham null', () {
-        expect(Assignment.fromJson({'startDate': '   '}).startDate, isNull);
+        expect(LessonReschedule.fromJson({'time': '   '}).time, isNull);
       });
       test('mazmunli satr o\'zgarmaydi (trim qilinmaydi)', () {
-        expect(Assignment.fromJson({'dueDate': '2026-08-10'}).dueDate, '2026-08-10');
-        expect(AssignmentMaterial.fromJson({'audioUrl': ' /a.mp3 '}).audioUrl, ' /a.mp3 ');
-        expect(AssignmentMaterial.fromJson({'audioUrl': 7}).audioUrl, '7');
+        expect(LessonReschedule.fromJson({'time': ' 09:00 '}).time, ' 09:00 ');
+        expect(MaterialInput.fromJson({'audioUrl': ' /a.mp3 '}).audioUrl, ' /a.mp3 ');
+        expect(MaterialInput.fromJson({'audioUrl': 7}).audioUrl, '7');
       });
     });
 
@@ -2128,10 +1692,12 @@ void main() {
     group('BUG-M6 (TUZATILDI) — ro\'yxat ichidagi null tashlab yuboriladi', () {
       test('_strList: [null] → bo\'sh', () {
         // BUG-M6 (TUZATILDI): UI da so'zma-so'z "null" chiqmaydi.
-        expect(Assignment.fromJson({'classIds': [null]}).classIds, isEmpty);
+        expect(ContactBulkResult.fromJson({'skippedNames': [null]}).skippedNames, isEmpty);
       });
       test('_strList: aralash ro\'yxatdan faqat null tushib qoladi', () {
-        expect(Assignment.fromJson({'classNames': ['A', null, 'B']}).classNames, ['A', 'B']);
+        expect(
+            ContactBulkResult.fromJson({'skippedNames': ['A', null, 'B']}).skippedNames,
+            ['A', 'B']);
       });
       test('_intList: [null] → bo\'sh (fantom 0 kun yo\'q)', () {
         expect(GroupJournalInfo.fromJson({'days': [null]}).days, isEmpty);
@@ -2287,44 +1853,9 @@ void main() {
         expect(j.containsKey('audioUrl'), isTrue);
         expect(j['audioUrl'], isNull);
       });
-      test('SaveAssignmentInput.toJson: barcha ixtiyoriylar null bo\'lib qoladi', () {
-        // BUG-M11: models.dart:382-397 — description/startDate/dueDate/referenceText null yuboriladi.
-        final j = SaveAssignmentInput(
-          subjectId: 's',
-          title: 't',
-          format: 'written',
-          classIds: const [],
-          lateAccept: false,
-          latePenaltyPct: 0,
-          maxScore: 0,
-          autoGrade: false,
-          materials: const [],
-          questions: const [],
-        ).toJson();
-        expect(j['description'], isNull);
-        expect(j['startDate'], isNull);
-        expect(j['dueDate'], isNull);
-        expect(j['referenceText'], isNull);
-        expect(j.keys, hasLength(14));
-      });
       test('null ixtiyoriy maydonlar JSON dan tushib qolishi kerak', () {
         final m = MaterialInput(name: 'a', url: 'u', size: 1, contentType: 'ct').toJson();
         expect(m.containsKey('audioUrl'), isFalse);
-
-        final s = SaveAssignmentInput(
-          subjectId: 's',
-          title: 't',
-          format: 'written',
-          classIds: const [],
-          lateAccept: false,
-          latePenaltyPct: 0,
-          maxScore: 0,
-          autoGrade: false,
-          materials: const [],
-          questions: const [],
-        ).toJson();
-        expect(s.containsKey('description'), isFalse);
-        expect(s.containsKey('referenceText'), isFalse);
       }, skip: _skipReason('BUG-M11'));
     });
 
@@ -2339,16 +1870,16 @@ void main() {
         expect(Subject.fromJson({'price': 'Infinity'}).price, 0.0);
       });
       test('maxScore: "-Infinity" → 0.0', () {
-        expect(Assignment.fromJson({'maxScore': '-Infinity'}).maxScore, 0.0);
+        expect(GroupTest.fromJson({'maxScore': '-Infinity'}).maxScore, 0.0);
       });
       test('_dn: score "NaN"/"Infinity" → null', () {
-        expect(SubmissionRow.fromJson({'score': 'NaN'}).score, isNull);
-        expect(SubmissionRow.fromJson({'score': '-Infinity'}).score, isNull);
+        expect(TestScoreRow.fromJson({'score': 'NaN'}).score, isNull);
+        expect(TestScoreRow.fromJson({'score': '-Infinity'}).score, isNull);
       });
       test('num turidagi NaN/cheksizlik ham filtrlanadi (faqat satr emas)', () {
         expect(Subject.fromJson({'price': double.nan}).price, 0.0);
         expect(Subject.fromJson({'price': double.infinity}).price, 0.0);
-        expect(SubmissionRow.fromJson({'score': double.nan}).score, isNull);
+        expect(TestScoreRow.fromJson({'score': double.nan}).score, isNull);
       });
       test('_i/_in ham cheksiz num ni rad etadi', () {
         expect(TeacherClass.fromJson({'grade': double.infinity}).grade, 0);
@@ -2386,21 +1917,6 @@ void main() {
       });
     });
 
-    /* ---------------- BUG-M14 ---------------- */
-    group('BUG-M14 (TUZATILDI) — _intMap String bo\'lmagan kalitni satrga aylantiradi', () {
-      test('grades: {1: 5} → {"1": 5}', () {
-        // BUG-M14 (TUZATILDI): raqamli kalit odatda o'quvchi/mezon id si —
-        // tashlab yuborish ma'lumot yo'qotish bo'lardi.
-        expect(EvaluationRow.fromJson({'grades': <dynamic, dynamic>{1: 5}}).grades, {'1': 5});
-      });
-      test('aralash kalitlar ham saqlanadi', () {
-        expect(
-          EvaluationRow.fromJson({'grades': <dynamic, dynamic>{1: 5, 'cr2': '4'}}).grades,
-          {'1': 5, 'cr2': 4},
-        );
-      });
-    });
-
     /* ---------------- BUG-M15 ---------------- */
     group('BUG-M15 (TUZATILDI) — _d toshgan raqamli satrni 0.0 ga aylantiradi', () {
       test('price: "1e400" → 0.0', () {
@@ -2409,7 +1925,7 @@ void main() {
         expect(Subject.fromJson({'price': '1e400'}).price, 0.0);
       });
       test('_dn: "1e400" → null', () {
-        expect(SubmissionRow.fromJson({'score': '1e400'}).score, isNull);
+        expect(TestScoreRow.fromJson({'score': '1e400'}).score, isNull);
       });
       test('_i: "1e400" → 0', () {
         expect(TeacherClass.fromJson({'grade': '1e400'}).grade, 0);

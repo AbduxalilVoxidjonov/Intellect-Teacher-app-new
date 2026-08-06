@@ -94,11 +94,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final menu = <_MenuItem>[
       // «Baholash» olib tashlandi — baholash guruh (jurnal) sahifasidagi «Baholash»
-      // tabida bajariladi. DIQQAT: bu ikkisi turli backend bo'limlari edi — profildagisi
-      // /teacher/evaluation (baholash turlari bo'yicha 1–5 baho), jurnaldagisi
-      // /teacher/grading (mezonlar bo'yicha bajardi/bajarmadi). API metodlari
-      // (TeacherApi.evalTypes / evalBoard / setEvalGrade) qaytarish uchun qoldirildi.
-      // «Testlar» bo'limi pastki navigatsiyaga ko'chirildi — menyuda takrorlanmaydi.
+      // tabida bajariladi. Backenddagi «O'quvchilarga feedback» (`/teacher/evaluation/*`)
+      // moduli BUTUNLAY o'chirilgan (CRM commit c3299f6), shuning uchun API metodlari
+      // ham olib tashlandi — qaytariladigan joyi yo'q.
+      // «Testlar» va «Reyting» bo'limlari pastki navigatsiyaga ko'chirilgan —
+      // menyuda takrorlanmaydi.
       _MenuItem('Maosh', 'Oylik hisob va tarix', Icons.account_balance_wallet_rounded, const Color(0xFF7C3AED),
           () => _open(const SalaryScreen())),
       // «O'quv dasturi» bo'limi HOZIRCHA olib tashlandi (keyinchalik qaytariladi).

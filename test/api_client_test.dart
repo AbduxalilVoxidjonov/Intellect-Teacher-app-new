@@ -415,145 +415,12 @@ void main() {
     });
   });
 
-  group('TeacherApi — baholash', () {
-    test('evalTypes() — GET /teacher/evaluation/types', () async {
-      fake.enqueueJson([
-        {'id': 't1', 'name': 'Nazorat', 'description': ''}
-      ]);
-      final list = await TeacherApi.evalTypes();
-      expect(fake.single.path, '/teacher/evaluation/types');
-      expect(list.single.name, 'Nazorat');
-    });
-
-    test('evalBoard() — month berilsa query\'da bo\'ladi', () async {
-      fake.enqueueJson({'months': [], 'month': '2024-09', 'week': 1, 'types': [], 'rows': []});
-      await TeacherApi.evalBoard('c1', 's1', month: '2024-09');
-      expect(fake.single.path, '/teacher/evaluation/board');
-      expect(fake.single.queryParameters,
-          {'classId': 'c1', 'subjectId': 's1', 'month': '2024-09'});
-    });
-
-    test('evalBoard(month: null) — _qp null\'ni tashlaydi', () async {
-      fake.enqueueJson({});
-      await TeacherApi.evalBoard('c1', 's1', month: null);
-      expect(fake.single.queryParameters, {'classId': 'c1', 'subjectId': 's1'});
-      expect(fake.single.queryParameters.containsKey('month'), isFalse);
-      expect(fake.single.uri.query, 'classId=c1&subjectId=s1');
-    });
-
-    test('setEvalGrade() — POST tanasi (week doim 0)', () async {
-      fake.enqueueEmpty(status: 204);
-      await TeacherApi.setEvalGrade('c1', 's1', 'st1', 'ty1', '2024-09', 5);
-      expect(fake.single.method, 'POST');
-      expect(fake.single.path, '/teacher/evaluation/grade');
-      expect(fake.single.body, {
-        'classId': 'c1',
-        'subjectId': 's1',
-        'studentId': 'st1',
-        'typeId': 'ty1',
-        'month': '2024-09',
-        'week': 0,
-        'score': 5,
-      });
-      expect(fake.single.wireJson, fake.single.body);
-    });
-
-    test('setEvalGrade() — score null ham yuboriladi', () async {
-      fake.enqueueEmpty(status: 204);
-      await TeacherApi.setEvalGrade('c1', 's1', 'st1', 'ty1', '2024-09', null);
-      expect(fake.single.body['score'], isNull);
-      expect(fake.single.body.containsKey('score'), isTrue);
-    });
-
+  group('TeacherApi — baholash (mezonlar)', () {
     test('gradingBoard() — yo\'lda groupId, month null tashlanadi', () async {
       fake.enqueueJson({});
       await TeacherApi.gradingBoard('g7');
       expect(fake.single.path, '/teacher/grading/group/g7/board');
       expect(fake.single.queryParameters, isEmpty);
-    });
-  });
-
-  group('TeacherApi — topshiriqlar', () {
-    SaveAssignmentInput input() => SaveAssignmentInput(
-          subjectId: 's1',
-          title: 'Uy ishi',
-          format: 'written',
-          classIds: ['c1'],
-          lateAccept: true,
-          latePenaltyPct: 10,
-          maxScore: 100,
-          autoGrade: false,
-          materials: const [],
-          questions: const [],
-        );
-
-    test('assignments() — GET ro\'yxat', () async {
-      fake.enqueueJson([
-        {'id': 'a1', 'title': 'Uy ishi'}
-      ]);
-      final list = await TeacherApi.assignments();
-      expect(fake.single.path, '/teacher/assignments');
-      expect(list.single.title, 'Uy ishi');
-    });
-
-    test('createAssignment() — POST + toJson() tanasi', () async {
-      fake.enqueueJson({'id': 'a9', 'title': 'Uy ishi'}, status: 201);
-      final a = await TeacherApi.createAssignment(input());
-      expect(fake.single.method, 'POST');
-      expect(fake.single.path, '/teacher/assignments');
-      expect(fake.single.body['title'], 'Uy ishi');
-      expect(fake.single.body['classIds'], ['c1']);
-      expect(fake.single.body['materials'], isEmpty);
-      expect(a.id, 'a9');
-    });
-
-    test('updateAssignment() — PUT /teacher/assignments/{id}', () async {
-      fake.enqueueEmpty(status: 204);
-      await TeacherApi.updateAssignment('a9', input());
-      expect(fake.single.method, 'PUT');
-      expect(fake.single.path, '/teacher/assignments/a9');
-      expect(fake.single.body['subjectId'], 's1');
-    });
-
-    test('deleteAssignment() — DELETE, void', () async {
-      fake.enqueueEmpty(status: 204);
-      await TeacherApi.deleteAssignment('a9');
-      expect(fake.single.method, 'DELETE');
-      expect(fake.single.path, '/teacher/assignments/a9');
-    });
-
-    test('deleteAssignment() — 404 da ApiException server message bilan', () async {
-      fake.enqueueJson({'message': 'Topshiriq topilmadi'}, status: 404);
-      await expectLater(
-        TeacherApi.deleteAssignment('a9'),
-        throwsA(isA<ApiException>()
-            .having((e) => e.message, 'message', 'Topshiriq topilmadi')
-            .having((e) => e.statusCode, 'statusCode', 404)),
-      );
-    });
-
-    test('setSubmission() — PUT ichma-ich yo\'l + tana', () async {
-      fake.enqueueEmpty(status: 204);
-      await TeacherApi.setSubmission('a1', 'st5', true, score: 8.5);
-      expect(fake.single.method, 'PUT');
-      expect(fake.single.path, '/teacher/assignments/a1/submissions/st5');
-      expect(fake.single.body, {'completed': true, 'score': 8.5});
-    });
-
-    test('assignmentResults() — GET .../results', () async {
-      fake.enqueueJson({});
-      await TeacherApi.assignmentResults('a1');
-      expect(fake.single.path, '/teacher/assignments/a1/results');
-    });
-
-    test('uploadFile() — POST /teacher/uploads, multipart', () async {
-      fake.enqueueJson({'url': '/uploads/a.pdf', 'name': 'a.pdf'});
-      await TeacherApi.uploadFile([1, 2, 3], 'a.pdf');
-      expect(fake.single.method, 'POST');
-      expect(fake.single.path, '/teacher/uploads');
-      expect(fake.single.data, isA<FormData>());
-      expect(fake.single.header('content-type'), startsWith('multipart/form-data'));
-      expect(fake.single.bodyText, contains('a.pdf'));
     });
   });
 
@@ -841,6 +708,69 @@ void main() {
     });
   });
 
+  /* ==================================================================== */
+  /*  "Bog'lanish kerak" — guruh jurnalidagi «Aloqa» tabi                 */
+  /* ==================================================================== */
+
+  group('TeacherApi — bog\'lanish navbati', () {
+    test('contactReasons() — GET /teacher/contact-reasons', () async {
+      fake.enqueueJson([
+        {'id': 'r1', 'category': 'contact', 'label': "To'lov kechikdi", 'order': 1},
+      ]);
+      final list = await TeacherApi.contactReasons();
+      expect(fake.single.method, 'GET');
+      expect(fake.single.path, '/teacher/contact-reasons');
+      expect(list.single.id, 'r1');
+      expect(list.single.label, "To'lov kechikdi");
+    });
+
+    test('sendToContactQueue() — POST guruh yo\'liga, SANA YUBORILMAYDI', () async {
+      fake.enqueueJson({'created': 2, 'skipped': 0, 'skippedNames': [], 'notFound': 0});
+      final r = await TeacherApi.sendToContactQueue(
+          'g1', ['st1', 'st2'], 'r1', 'darsga kelmadi');
+      expect(fake.single.method, 'POST');
+      expect(fake.single.path, '/teacher/groups/g1/contacts');
+      expect(fake.single.body, {
+        'studentIds': ['st1', 'st2'],
+        'reasonId': 'r1',
+        'note': 'darsga kelmadi',
+      });
+      // Rejalashtirish operatorning ishi — tanada sana bo'lmasligi SHART.
+      expect(fake.single.body.containsKey('due'), isFalse);
+      expect(fake.single.body.containsKey('dueDate'), isFalse);
+      expect(r.created, 2);
+    });
+
+    test('sendToContactQueue() — guruh id si yo\'lda kodlanadi', () async {
+      fake.enqueueJson({'created': 0, 'skipped': 0, 'skippedNames': [], 'notFound': 0});
+      await TeacherApi.sendToContactQueue('g 1/2', ['st1'], 'r1', 'izoh');
+      expect(fake.single.path, '/teacher/groups/g%201%2F2/contacts');
+    });
+
+    test('sendToContactQueue() — chetlab o\'tilganlar javobda qaytadi', () async {
+      fake.enqueueJson({
+        'created': 1,
+        'skipped': 2,
+        'skippedNames': ['Ali', 'Vali'],
+        'notFound': 3,
+      });
+      final r = await TeacherApi.sendToContactQueue('g1', ['a', 'b', 'c'], 'r1', 'izoh');
+      expect(r.created, 1);
+      expect(r.skipped, 2);
+      expect(r.skippedNames, ['Ali', 'Vali']);
+      expect(r.notFound, 3);
+    });
+
+    test('sendToContactQueue() — 400 da serverning matni chiqadi', () async {
+      fake.enqueueJson({'message': "O'quvchi tanlanmagan"}, status: 400);
+      await expectLater(
+        TeacherApi.sendToContactQueue('g1', [], 'r1', 'izoh'),
+        throwsA(isA<ApiException>()
+            .having((e) => e.message, 'message', "O'quvchi tanlanmagan")),
+      );
+    });
+  });
+
   group('TeacherApi — maosh, reyting, shartnoma, feedback', () {
     test('salary(from,to) — ikkala query ham ketadi', () async {
       fake.enqueueJson({});
@@ -947,7 +877,7 @@ void main() {
     test('BUG-A3 (TUZATILDI): 500 — server message\'li ApiException', () async {
       fake.enqueueJson({'message': 'Server yiqildi'}, status: 500);
       await expectLater(
-        TeacherApi.assignments(),
+        TeacherApi.myClasses(),
         throwsA(isA<ApiException>()
             .having((e) => e.statusCode, 'statusCode', 500)
             .having((e) => e.message, 'message', 'Server yiqildi')),
@@ -1061,11 +991,11 @@ void main() {
       expect(await TeacherApi.chatClasses(), isEmpty);
     });
 
-    test('BUG-A5 (TUZATILDI): assignments() bo\'sh tanada bo\'sh ro\'yxat beradi', () async {
+    test('BUG-A5 (TUZATILDI): contactReasons() bo\'sh tanada bo\'sh ro\'yxat beradi', () async {
       fake.enqueue(FakeResponse(204, '', contentType: null));
-      expect(await TeacherApi.assignments(), isEmpty);
+      expect(await TeacherApi.contactReasons(), isEmpty);
       fake.enqueueEmpty(status: 200);
-      expect(await TeacherApi.assignments(), isEmpty);
+      expect(await TeacherApi.contactReasons(), isEmpty);
     });
 
     test('BUG-A5 (TUZATILDI): notifications() bo\'sh tanada bo\'sh model beradi', () async {
@@ -1126,22 +1056,14 @@ void main() {
     // butun faylni yuklab bo'lgach 413 oladi.
     List<int> bytes(int n) => List<int>.filled(n, 1);
 
-    test('uploadFile() — 20 MB dan katta fayl 413 ApiException beradi', () async {
+    test('uploadTestFile() — 20 MB dan katta fayl 413 ApiException beradi', () async {
       await expectLater(
-        TeacherApi.uploadFile(bytes(20 * 1024 * 1024 + 1), 'katta.pdf'),
+        TeacherApi.uploadTestFile(bytes(20 * 1024 * 1024 + 1), 'katta.pdf'),
         throwsA(isA<ApiException>()
             .having((e) => e.statusCode, 'statusCode', 413)
             .having((e) => e.message, 'message', "Fayl 20 MB dan katta bo'lmasligi kerak")),
       );
       expect(fake.count, 0, reason: "so'rov umuman yuborilmasligi kerak");
-    });
-
-    test('uploadTestFile() — 20 MB dan katta fayl 413 beradi', () async {
-      await expectLater(
-        TeacherApi.uploadTestFile(bytes(20 * 1024 * 1024 + 1), 'q.pdf'),
-        throwsA(isA<ApiException>().having((e) => e.statusCode, 'statusCode', 413)),
-      );
-      expect(fake.count, 0);
     });
 
     test('sendFeedback() — katta rasm ham 413 beradi', () async {
@@ -1155,14 +1077,14 @@ void main() {
 
     test('aniq 20 MB — chegara ichida, so\'rov ketadi', () async {
       fake.enqueueJson({'url': '/uploads/a.pdf', 'name': 'a.pdf'});
-      await TeacherApi.uploadFile(bytes(20 * 1024 * 1024), 'a.pdf');
+      await TeacherApi.uploadTestFile(bytes(20 * 1024 * 1024), 'a.pdf');
       expect(fake.count, 1);
-      expect(fake.single.path, '/teacher/uploads');
+      expect(fake.single.path, '/teacher/test-results/uploads');
     });
 
     test('bo\'sh fayl — statuskodsiz "Fayl bo\'sh"', () async {
       await expectLater(
-        TeacherApi.uploadFile(const <int>[], 'bosh.pdf'),
+        TeacherApi.uploadTestFile(const <int>[], 'bosh.pdf'),
         throwsA(isA<ApiException>()
             .having((e) => e.statusCode, 'statusCode', isNull)
             .having((e) => e.message, 'message', "Fayl bo'sh")),
